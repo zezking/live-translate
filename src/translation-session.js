@@ -33,10 +33,10 @@ export class TranslationSession extends EventEmitter {
         },
         onmessage: (message) => {
           const content = message.serverContent;
-          if (content?.inputTranscription) {
+          if (content?.inputTranscription?.text) {
             this.emit('inputTranscription', content.inputTranscription.text);
           }
-          if (content?.outputTranscription) {
+          if (content?.outputTranscription?.text) {
             this.emit('outputTranscription', content.outputTranscription.text);
           }
           if (content?.modelTurn?.parts) {

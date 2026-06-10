@@ -55,7 +55,7 @@
     ws.onmessage = function (event) {
       var msg = JSON.parse(event.data);
 
-      if (msg.type === 'transcription' && !isPaused) {
+      if (msg.type === 'transcription' && !isPaused && msg.text) {
         if (msg.transcriptionType === 'input') {
           inputBuffer += msg.text;
           inputText.textContent = inputBuffer;
