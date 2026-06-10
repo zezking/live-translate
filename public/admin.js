@@ -1,4 +1,8 @@
 (function () {
+  const loginScreen = document.getElementById('login-screen');
+  const passwordInput = document.getElementById('password-input');
+  const loginBtn = document.getElementById('login-btn');
+  const loginError = document.getElementById('login-error');
   const statusEl = document.getElementById('status');
   const languageCheckboxes = document.getElementById('language-checkboxes');
   const levelMeter = document.getElementById('level-meter');
@@ -17,10 +21,63 @@
   let levelEventSource = null;
   let pollInterval = null;
   let isFreeTier = false;
+  let adminKey = sessionStorage.getItem('adminKey') || '';
 
   const meterFill = document.createElement('div');
   meterFill.className = 'level-meter-fill';
   levelMeter.appendChild(meterFill);
+
+  function authHeaders() {
+    return { 'Authorization': 'Bearer ' + adminKey };
+  }
+
+  function authFetch(url, options) {
+    options = options || {};
+    options.headers = options.headers || {};
+    options.headers['Authorization'] = 'Bearer ' + adminKey;
+    return fetch(url, options);
+  }
+
+  function checkAuth() {
+    if (!adminKey) return false;
+    const app = document.getElementById('app');
+    loginScreen.classList.add('hidden');
+    app.classList.remove('hidden');
+    return true;
+  }
+
+  loginBtn.addEventListener('click', attemptLogin);
+  passwordInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') attemptLogin();
+  });
+
+  async function attemptLogin() {
+    const password = passwordInput.value.trim();
+    if (!password) return;
+
+    loginBtn.textContent = '...';
+    loginBtn.disabled = true;
+
+    try {
+      const res = await fetch('/api/key-status?key=' + encodeURIComponent(password));
+      if (res.ok) {
+        adminKey = password;
+        sessionStorage.setItem('adminKey', adminKey);
+        loginError.classList.add('hidden');
+        checkAuth();
+        init();
+      } else {
+        loginError.classList.remove('hidden');
+        passwordInput.value = '';
+        passwordInput.focus();
+      }
+    } catch (e) {
+      loginError.classList.remove('hidden');
+    }
+
+    loginBtn.textContent = 'LOGIN';
+    loginBtn.disabled = false;
+  }
 
   function init() {
     loadLanguages();
@@ -30,7 +87,7 @@
 
   async function loadTierStatus() {
     try {
-      const res = await fetch('/api/key-status');
+      const res = await authFetch('/api/key-status');
       const data = await res.json();
       const badge = document.getElementById('tier-badge');
       if (data.tier === 'free') {
@@ -69,7 +126,7 @@
   }
 
   async function loadQRCode() {
-    const res = await fetch('/api/qrcode');
+    const res = await authFetch('/api/qrcode');
     const data = await res.json();
     qrImage.src = data.dataUrl;
     qrUrl.textContent = data.url;
@@ -93,7 +150,7 @@
   function startPolling() {
     if (pollInterval) clearInterval(pollInterval);
     pollInterval = setInterval(async () => {
-      const res = await fetch('/api/status');
+      const res = await authFetch('/api/status');
       const data = await res.json();
       statAttendees.textContent = data.attendees;
       statCost.textContent = isFreeTier ? 'Free' : ('$' + data.estimatedCost.toFixed(2));
@@ -115,7 +172,7 @@
   }
 
   function startAudioLevel() {
-    levelEventSource = new EventSource('/api/audio-level');
+    levelEventSource = new EventSource('/api/audio-level?key=' + encodeURIComponent(adminKey));
     levelEventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
       const pct = Math.max(0, Math.min(100, ((data.db + 60) / 60) * 100));
@@ -143,7 +200,7 @@
     startBtn.textContent = 'STARTING...';
 
     try {
-      await fetch('/api/start', {
+      await authFetch('/api/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ languages }),
@@ -165,13 +222,13 @@
   pauseBtn.addEventListener('click', async () => {
     const isPaused = pauseBtn.textContent === 'RESUME';
     const endpoint = isPaused ? '/api/resume' : '/api/pause';
-    await fetch(endpoint, { method: 'POST' });
+    await authFetch(endpoint, { method: 'POST' });
     pauseBtn.textContent = isPaused ? 'PAUSE' : 'RESUME';
     setStatus(isPaused ? 'Translating' : 'Paused', isPaused);
   });
 
   stopBtn.addEventListener('click', async () => {
-    await fetch('/api/stop', { method: 'POST' });
+    await authFetch('/api/stop', { method: 'POST' });
     setStatus('Ready', false);
     activeControls.classList.add('hidden');
     startBtn.classList.remove('hidden');
@@ -209,5 +266,7 @@
     checkboxes.forEach((cb) => { cb.disabled = disabled; });
   }
 
-  init();
+  if (adminKey && checkAuth()) {
+    init();
+  }
 })();

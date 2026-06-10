@@ -237,3 +237,35 @@ body {
   color: #333;
   letter-spacing: 1px;
 }
+
+#login-screen {
+  max-width: 400px;
+  margin: 0 auto;
+  padding: 120px 24px 32px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.login-input {
+  padding: 14px 16px;
+  font-size: 16px;
+  background: #111;
+  color: #fff;
+  border: 1px solid #333;
+  outline: none;
+  letter-spacing: 2px;
+}
+
+.login-input:focus {
+  border-color: #fff;
+}
+
+.login-error {
+  font-size: 13px;
+  color: #ef5350;
+  text-align: center;
+}

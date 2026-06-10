@@ -13,6 +13,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const server = createServer(app);
 const PORT = process.env.PORT || 3000;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'centrechurch';
 
 const apiKey = process.env.GEMINI_API_KEY;
 const audioCapture = new AudioCapture();
@@ -47,6 +48,13 @@ async function detectTier() {
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+const requireAdmin = (req, res, next) => {
+  const auth = req.headers.authorization;
+  if (auth === `Bearer ${ADMIN_PASSWORD}`) return next();
+  if (req.query.key === ADMIN_PASSWORD) return next();
+  res.status(401).json({ error: 'Unauthorized' });
+};
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'attendee.html'));
@@ -84,7 +92,7 @@ app.get('/api/status', async (req, res) => {
   });
 });
 
-app.get('/api/key-status', async (req, res) => {
+app.get('/api/key-status', requireAdmin, async (req, res) => {
   const tier = await detectTier();
   const keyPrefix = apiKey ? apiKey.slice(0, 10) + '...' : 'missing';
   res.json({ tier, keyPrefix });
@@ -94,12 +102,12 @@ app.get('/api/languages', (req, res) => {
   res.json(SessionManager.LANGUAGES);
 });
 
-app.get('/api/qrcode', async (req, res) => {
+app.get('/api/qrcode', requireAdmin, async (req, res) => {
   const { url, dataUrl } = await generateQRCode(PORT);
   res.json({ url, dataUrl });
 });
 
-app.post('/api/start', async (req, res) => {
+app.post('/api/start', requireAdmin, async (req, res) => {
   try {
     const { languages } = req.body || {};
     if (languages) {
@@ -113,21 +121,21 @@ app.post('/api/start', async (req, res) => {
   }
 });
 
-app.post('/api/pause', (req, res) => {
+app.post('/api/pause', requireAdmin, (req, res) => {
   sessionManager.pause();
   audioCapture.pause();
   broadcaster.broadcastStatus({ state: 'paused' });
   res.json({ status: 'paused' });
 });
 
-app.post('/api/resume', (req, res) => {
+app.post('/api/resume', requireAdmin, (req, res) => {
   sessionManager.resume();
   audioCapture.resume();
   broadcaster.broadcastStatus({ state: 'translating' });
   res.json({ status: 'resumed' });
 });
 
-app.post('/api/stop', async (req, res) => {
+app.post('/api/stop', requireAdmin, async (req, res) => {
   try {
     audioCapture.stop();
     await sessionManager.stop();
@@ -138,7 +146,7 @@ app.post('/api/stop', async (req, res) => {
   }
 });
 
-app.get('/api/audio-level', (req, res) => {
+app.get('/api/audio-level', requireAdmin, (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
