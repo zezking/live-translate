@@ -6,6 +6,7 @@ const LANGUAGES = [
   { code: 'ko', label: '한국어 (Korean)' },
   { code: 'pt-BR', label: 'Português (Portuguese)' },
   { code: 'es', label: 'Español (Spanish)' },
+  { code: 'fa', label: 'فارسی (Farsi)' },
 ];
 
 export class SessionManager extends EventEmitter {
