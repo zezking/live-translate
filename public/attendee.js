@@ -82,6 +82,7 @@
     var wsUrl = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=' + encodeURIComponent(token);
 
     geminiWs = new WebSocket(wsUrl);
+    geminiWs.binaryType = 'arraybuffer';
 
     geminiWs.onopen = function () {
       geminiWs.send(JSON.stringify({
@@ -92,6 +93,9 @@
     var setupComplete = false;
 
     geminiWs.onmessage = function (event) {
+      if (typeof event.data !== 'string') {
+        return;
+      }
       var msg = JSON.parse(event.data);
 
       if (msg.setupComplete) {
