@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Centre Church — Live Translation Control</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <div id="app">
+    <div class="header">
+      <h1 class="title">CENTRE CHURCH — Live Translation Control</h1>
+    </div>
+    <div class="section-divider"></div>
+    <div class="section">
+      <p class="section-label">Status: <span id="status" class="status-text">Ready</span></p>
+    </div>
+    <div class="section">
+      <p class="section-label">Languages:</p>
+      <div id="language-checkboxes" class="language-grid"></div>
+    </div>
+    <div class="section">
+      <p class="section-label">Audio Input:</p>
+      <div class="level-meter-container">
+        <div id="level-meter" class="level-meter"></div>
+        <span id="level-db" class="level-db">-- dB</span>
+      </div>
+    </div>
+    <div class="section-divider"></div>
+    <div class="controls">
+      <button id="start-btn" class="btn btn-start">START</button>
+    </div>
+    <div class="controls hidden" id="active-controls">
+      <button id="pause-btn" class="btn btn-pause">PAUSE</button>
+      <button id="stop-btn" class="btn btn-stop">STOP</button>
+    </div>
+    <div class="section-divider"></div>
+    <div class="stats">
+      <div class="stat">
+        <span class="stat-label">Attendees</span>
+        <span id="stat-attendees" class="stat-value">0</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Session</span>
+        <span id="stat-timer" class="stat-value">00:00:00</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Est. cost</span>
+        <span id="stat-cost" class="stat-value">$0.00</span>
+      </div>
+    </div>
+    <div class="section-divider"></div>
+    <div class="qr-section">
+      <div class="qr-container">
+        <img id="qr-image" src="" alt="QR Code">
+      </div>
+      <div class="qr-info">
+        <p id="qr-url" class="qr-url"></p>
+        <button id="print-qr-btn" class="btn btn-small">Print</button>
+      </div>
+    </div>
+    <div class="section-divider"></div>
+    <p class="footer">Centre Church 2025</p>
+  </div>
+  <script src="admin.js"></script>
+</body>
+</html>
