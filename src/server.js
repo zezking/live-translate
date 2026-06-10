@@ -126,7 +126,8 @@ app.get('/api/audio-level', (req, res) => {
 server.listen(PORT, '0.0.0.0', async () => {
   const ip = await getLocalIP();
   console.log(`\n  Centre Church Live Translation`);
-  console.log(`  Admin:  http://localhost:${PORT}/admin`);
-  console.log(`  Attend: http://${ip}:${PORT}`);
+  console.log(`  Admin:       http://localhost:${PORT}/admin`);
+  console.log(`  Attendee:    http://${ip}:${PORT}`);
+  console.log(`  Interpreter: http://${ip}:${PORT}/interpreter`);
   console.log(`  Press Ctrl+C to stop\n`);
 });
