@@ -65,6 +65,7 @@
       }
 
       var data = await res.json();
+      console.log('[token] got token:', data.token ? data.token.slice(0, 20) + '...' : 'NONE');
       connectGemini(data.token, languageCode);
     } catch (err) {
       console.error('Ephemeral token error:', err);
@@ -81,10 +82,12 @@
 
     var wsUrl = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=' + encodeURIComponent(token);
 
+    console.log('[gemini] Connecting to', wsUrl.slice(0, 80) + '...');
     geminiWs = new WebSocket(wsUrl);
     geminiWs.binaryType = 'arraybuffer';
 
     geminiWs.onopen = function () {
+      console.log('[gemini] WS opened, sending setup');
       geminiWs.send(JSON.stringify({
         setup: { model: 'models/gemini-3.5-live-translate-preview' }
       }));
@@ -97,6 +100,7 @@
         return;
       }
       var msg = JSON.parse(event.data);
+      console.log('[gemini] message:', Object.keys(msg).join(','));
 
       if (msg.setupComplete) {
         setupComplete = true;
@@ -111,7 +115,7 @@
         var content = msg.serverContent;
 
         if (content.outputTranscription && content.outputTranscription.text) {
-          // could display transcription if needed
+          console.log('[gemini] transcription:', content.outputTranscription.text);
         }
 
         if (content.modelTurn && content.modelTurn.parts) {
@@ -130,7 +134,8 @@
       }
     };
 
-    geminiWs.onclose = function () {
+    geminiWs.onclose = function (ev) {
+      console.log('[gemini] closed:', ev.code, ev.reason);
       stopAudioStream();
       if (selectedLanguage === languageCode && !isPaused) {
         reconnectOverlay.classList.remove('hidden');
@@ -141,7 +146,8 @@
       }
     };
 
-    geminiWs.onerror = function () {
+    geminiWs.onerror = function (ev) {
+      console.error('[gemini] WS error:', ev);
       playerStatus.textContent = 'Connection error';
     };
   }
