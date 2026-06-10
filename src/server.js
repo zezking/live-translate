@@ -28,12 +28,20 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'admin.html'));
 });
 
+app.get('/interpreter', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'interpreter.html'));
+});
+
 audioCapture.on('chunk', (chunk) => {
   sessionManager.sendAudio(chunk);
 });
 
 sessionManager.on('audio', ({ languageCode, buffer }) => {
   broadcaster.broadcastAudio(languageCode, buffer);
+});
+
+sessionManager.on('transcription', ({ languageCode, type, text }) => {
+  broadcaster.broadcastTranscription(languageCode, type, text);
 });
 
 app.get('/api/status', (req, res) => {

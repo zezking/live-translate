@@ -9,7 +9,7 @@ export class AudioBroadcaster extends EventEmitter {
 
     this.wss.on('connection', (ws) => {
       const clientId = Date.now().toString(36) + Math.random().toString(36).slice(2);
-      const clientInfo = { languageCode: null, ws };
+      const clientInfo = { languageCode: null, mode: 'audio', ws };
 
       this.clients.set(clientId, clientInfo);
       this.emit('clientConnected', { clientId, totalClients: this.clients.size });
@@ -19,6 +19,9 @@ export class AudioBroadcaster extends EventEmitter {
           const msg = JSON.parse(data);
           if (msg.type === 'selectLanguage') {
             clientInfo.languageCode = msg.languageCode;
+          }
+          if (msg.type === 'setMode') {
+            clientInfo.mode = msg.mode;
           }
         } catch (e) {
           // ignore malformed messages
@@ -45,7 +48,22 @@ export class AudioBroadcaster extends EventEmitter {
     });
 
     for (const [, client] of this.clients) {
-      if (client.languageCode === languageCode && client.ws.readyState === 1) {
+      if (client.languageCode === languageCode && client.mode === 'audio' && client.ws.readyState === 1) {
+        client.ws.send(message);
+      }
+    }
+  }
+
+  broadcastTranscription(languageCode, type, text) {
+    const message = JSON.stringify({
+      type: 'transcription',
+      languageCode,
+      transcriptionType: type,
+      text,
+    });
+
+    for (const [, client] of this.clients) {
+      if (client.languageCode === languageCode && client.mode === 'text' && client.ws.readyState === 1) {
         client.ws.send(message);
       }
     }

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Centre Church — Interpreter Assist</title>
+  <link rel="stylesheet" href="interpreter.css">
+</head>
+<body>
+  <div id="app">
+    <div id="select-view">
+      <div class="header">
+        <h1 class="title">INTERPRETER ASSIST</h1>
+        <p class="subtitle">Live Text Translation</p>
+      </div>
+      <div class="divider"></div>
+      <p class="prompt">Select your language:</p>
+      <div id="language-buttons" class="language-list"></div>
+      <div class="divider"></div>
+      <p class="footer">Centre Church 2025</p>
+    </div>
+    <div id="transcript-view" class="hidden">
+      <div class="transcript-header">
+        <h2 id="transcript-language" class="transcript-title"></h2>
+        <div class="live-indicator">
+          <span class="live-dot"></span>
+          <span>LIVE</span>
+        </div>
+        <p id="transcript-status" class="status-text">Listening...</p>
+      </div>
+      <div id="transcript-body" class="transcript-body">
+        <div id="input-text" class="text-block input-text"></div>
+        <div class="text-divider"></div>
+        <div id="output-text" class="text-block output-text"></div>
+      </div>
+      <div class="transcript-footer">
+        <button id="pause-btn" class="pause-btn">Pause</button>
+        <button id="clear-btn" class="clear-btn">Clear</button>
+        <button id="change-lang-btn" class="change-lang">&larr; Change Language</button>
+      </div>
+    </div>
+  </div>
+  <div id="reconnect-overlay" class="hidden">
+    <p>Reconnecting...</p>
+  </div>
+  <script src="interpreter.js"></script>
+</body>
+</html>
