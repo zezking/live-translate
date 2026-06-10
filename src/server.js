@@ -19,6 +19,7 @@ const apiKey = process.env.GEMINI_API_KEY;
 const audioCapture = new AudioCapture();
 const sessionManager = new SessionManager(apiKey);
 const broadcaster = new AudioBroadcaster(server);
+const genAI = new GoogleGenAI({ apiKey, httpOptions: { apiVersion: 'v1alpha' } });
 
 let cachedTier = null;
 
@@ -100,6 +101,55 @@ app.get('/api/key-status', requireAdmin, async (req, res) => {
 
 app.get('/api/languages', (req, res) => {
   res.json(SessionManager.LANGUAGES);
+});
+
+app.post('/api/ephemeral-token', async (req, res) => {
+  const { languageCode } = req.body || {};
+  if (!languageCode) {
+    return res.status(400).json({ error: 'languageCode required' });
+  }
+
+  try {
+    const expireTime = new Date(Date.now() + 90 * 60 * 1000).toISOString();
+    const token = await genAI.authTokens.create({
+      config: {
+        uses: 1,
+        expireTime,
+        newSessionExpireTime: expireTime,
+        liveConnectConstraints: {
+          model: 'gemini-3.5-live-translate-preview',
+          config: {
+            responseModalities: ['AUDIO'],
+            outputAudioTranscription: {},
+            translationConfig: {
+              targetLanguageCode: languageCode,
+              echoTargetLanguage: false,
+            },
+          },
+        },
+        httpOptions: { apiVersion: 'v1alpha' },
+      },
+    });
+    res.json({ token: token.name });
+  } catch (err) {
+    console.error('Ephemeral token error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/audio-stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  const handler = (chunk) => {
+    res.write(`data: ${chunk.toString('base64')}\n\n`);
+  };
+
+  audioCapture.on('chunk', handler);
+  req.on('close', () => {
+    audioCapture.removeListener('chunk', handler);
+  });
 });
 
 app.get('/api/qrcode', requireAdmin, async (req, res) => {

@@ -1,38 +1,40 @@
 (function () {
-  const selectView = document.getElementById('select-view');
-  const playerView = document.getElementById('player-view');
-  const languageButtons = document.getElementById('language-buttons');
-  const playerLanguage = document.getElementById('player-language');
-  const playerStatus = document.getElementById('player-status');
-  const playerTimer = document.getElementById('player-timer');
-  const pauseBtn = document.getElementById('pause-btn');
-  const volumeSlider = document.getElementById('volume-slider');
-  const changeLangBtn = document.getElementById('change-lang-btn');
-  const reconnectOverlay = document.getElementById('reconnect-overlay');
+  var selectView = document.getElementById('select-view');
+  var playerView = document.getElementById('player-view');
+  var languageButtons = document.getElementById('language-buttons');
+  var playerLanguage = document.getElementById('player-language');
+  var playerStatus = document.getElementById('player-status');
+  var playerTimer = document.getElementById('player-timer');
+  var pauseBtn = document.getElementById('pause-btn');
+  var volumeSlider = document.getElementById('volume-slider');
+  var changeLangBtn = document.getElementById('change-lang-btn');
+  var reconnectOverlay = document.getElementById('reconnect-overlay');
 
-  let ws = null;
-  let selectedLanguage = null;
-  let isPaused = false;
-  let audioContext = null;
-  let gainNode = null;
-  let mediaDestination = null;
-  let audioElement = null;
-  let nextPlayTime = 0;
-  let timerInterval = null;
-  let sessionStartTime = null;
-  let reconnectTimeout = null;
-  let activeSources = [];
+  var selectedLanguage = null;
+  var isPaused = false;
+  var audioContext = null;
+  var gainNode = null;
+  var mediaDestination = null;
+  var audioElement = null;
+  var nextPlayTime = 0;
+  var activeSources = [];
+  var timerInterval = null;
+  var sessionStartTime = null;
+  var geminiWs = null;
+  var audioEventSource = null;
+  var statusWs = null;
+  var reconnectTimeout = null;
 
   function init() {
     fetch('/api/languages')
-      .then((r) => r.json())
-      .then((languages) => {
+      .then(function (r) { return r.json(); })
+      .then(function (languages) {
         languageButtons.innerHTML = '';
-        languages.forEach((lang) => {
-          const btn = document.createElement('button');
+        languages.forEach(function (lang) {
+          var btn = document.createElement('button');
           btn.className = 'lang-btn';
           btn.textContent = lang.label;
-          btn.addEventListener('click', () => selectLanguage(lang.code, lang.label));
+          btn.addEventListener('click', function () { selectLanguage(lang.code, lang.label); });
           languageButtons.appendChild(btn);
         });
       });
@@ -43,32 +45,150 @@
     playerLanguage.textContent = label;
     selectView.classList.add('hidden');
     playerView.classList.remove('hidden');
+    playerStatus.textContent = 'Connecting...';
     startAudio();
-    connectWebSocket();
+    connectStatusWebSocket();
+    requestEphemeralToken(code);
   }
 
-  function connectWebSocket() {
+  async function requestEphemeralToken(languageCode) {
+    try {
+      var res = await fetch('/api/ephemeral-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ languageCode: languageCode }),
+      });
+
+      if (!res.ok) {
+        var err = await res.json();
+        throw new Error(err.error || 'Token request failed');
+      }
+
+      var data = await res.json();
+      connectGemini(data.token, languageCode);
+    } catch (err) {
+      console.error('Ephemeral token error:', err);
+      playerStatus.textContent = 'Connection error';
+      reconnectOverlay.classList.remove('hidden');
+    }
+  }
+
+  function connectGemini(token, languageCode) {
     if (reconnectTimeout) {
       clearTimeout(reconnectTimeout);
       reconnectTimeout = null;
     }
 
-    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${protocol}//${location.host}/ws`);
-    const currentLang = selectedLanguage;
+    var wsUrl = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?access_token=' + encodeURIComponent(token);
 
-    ws.onopen = () => {
-      reconnectOverlay.classList.add('hidden');
-      ws.send(JSON.stringify({ type: 'selectLanguage', languageCode: currentLang }));
-      resumeAudio();
-      startTimer();
+    geminiWs = new WebSocket(wsUrl);
+
+    geminiWs.onopen = function () {
+      var setupMessage = {
+        setup: {
+          model: 'models/gemini-3.5-live-translate-preview',
+          generationConfig: {
+            responseModalities: ['AUDIO'],
+            outputAudioTranscription: {},
+            translationConfig: {
+              targetLanguageCode: languageCode,
+              echoTargetLanguage: false,
+            },
+          },
+        },
+      };
+      geminiWs.send(JSON.stringify(setupMessage));
     };
 
-    ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
-      if (msg.type === 'audio' && !isPaused && msg.languageCode === selectedLanguage) {
-        queueAudio(msg.data);
+    var setupComplete = false;
+
+    geminiWs.onmessage = function (event) {
+      var msg = JSON.parse(event.data);
+
+      if (msg.setupComplete) {
+        setupComplete = true;
+        reconnectOverlay.classList.add('hidden');
+        playerStatus.textContent = 'Listening...';
+        startAudioStream();
+        startTimer();
+        return;
       }
+
+      if (msg.serverContent) {
+        var content = msg.serverContent;
+
+        if (content.outputTranscription && content.outputTranscription.text) {
+          // could display transcription if needed
+        }
+
+        if (content.modelTurn && content.modelTurn.parts) {
+          for (var i = 0; i < content.modelTurn.parts.length; i++) {
+            var part = content.modelTurn.parts[i];
+            if (part.inlineData && !isPaused) {
+              var audioBytes = atob(part.inlineData.data);
+              var pcm = new Int16Array(audioBytes.length / 2);
+              for (var j = 0; j < audioBytes.length; j += 2) {
+                pcm[j / 2] = (audioBytes.charCodeAt(j + 1) << 8) | audioBytes.charCodeAt(j);
+              }
+              queuePCM(pcm);
+            }
+          }
+        }
+      }
+    };
+
+    geminiWs.onclose = function () {
+      stopAudioStream();
+      if (selectedLanguage === languageCode && !isPaused) {
+        reconnectOverlay.classList.remove('hidden');
+        playerStatus.textContent = 'Reconnecting...';
+        reconnectTimeout = setTimeout(function () {
+          requestEphemeralToken(languageCode);
+        }, 2000);
+      }
+    };
+
+    geminiWs.onerror = function () {
+      playerStatus.textContent = 'Connection error';
+    };
+  }
+
+  function startAudioStream() {
+    stopAudioStream();
+    audioEventSource = new EventSource('/api/audio-stream');
+    audioEventSource.onmessage = function (event) {
+      if (!geminiWs || geminiWs.readyState !== 1 || isPaused) return;
+
+      var audioMessage = {
+        realtimeInput: {
+          audio: {
+            data: event.data,
+            mimeType: 'audio/pcm;rate=16000',
+          },
+        },
+      };
+      geminiWs.send(JSON.stringify(audioMessage));
+    };
+  }
+
+  function stopAudioStream() {
+    if (audioEventSource) {
+      audioEventSource.close();
+      audioEventSource = null;
+    }
+  }
+
+  function connectStatusWebSocket() {
+    var protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    statusWs = new WebSocket(protocol + '//' + location.host + '/ws');
+
+    statusWs.onopen = function () {
+      statusWs.send(JSON.stringify({ type: 'selectLanguage', languageCode: selectedLanguage }));
+      statusWs.send(JSON.stringify({ type: 'setMode', mode: 'status-only' }));
+    };
+
+    statusWs.onmessage = function (event) {
+      var msg = JSON.parse(event.data);
       if (msg.type === 'status') {
         if (msg.state === 'paused') {
           playerStatus.textContent = 'Paused';
@@ -80,15 +200,10 @@
       }
     };
 
-    ws.onclose = () => {
-      if (selectedLanguage === currentLang) {
-        reconnectOverlay.classList.remove('hidden');
-        reconnectTimeout = setTimeout(connectWebSocket, 2000);
+    statusWs.onclose = function () {
+      if (selectedLanguage) {
+        setTimeout(connectStatusWebSocket, 2000);
       }
-    };
-
-    ws.onerror = () => {
-      reconnectOverlay.classList.remove('hidden');
     };
   }
 
@@ -97,7 +212,7 @@
       audioContext.resume();
     }
     if (audioElement && audioElement.paused) {
-      audioElement.play().catch(() => {});
+      audioElement.play().catch(function () {});
     }
   }
 
@@ -119,7 +234,6 @@
     audioElement.srcObject = mediaDestination.stream;
     audioElement.setAttribute('playsinline', '');
     audioElement.setAttribute('webkit-playsinline', '');
-
     audioElement.play().catch(function () {});
 
     nextPlayTime = audioContext.currentTime;
@@ -129,9 +243,8 @@
     }
   }
 
-  function queueAudio(base64Data) {
+  function queuePCM(pcmData) {
     if (!audioContext) return;
-
     if (audioContext.state === 'suspended') {
       audioContext.resume();
       if (audioElement && audioElement.paused) {
@@ -140,15 +253,9 @@
       return;
     }
 
-    var raw = atob(base64Data);
-    var pcm = new Int16Array(raw.length / 2);
-    for (var i = 0; i < raw.length; i += 2) {
-      pcm[i / 2] = (raw.charCodeAt(i + 1) << 8) | raw.charCodeAt(i);
-    }
-
-    var float32 = new Float32Array(pcm.length);
-    for (var j = 0; j < pcm.length; j++) {
-      float32[j] = pcm[j] / 32768;
+    var float32 = new Float32Array(pcmData.length);
+    for (var i = 0; i < pcmData.length; i++) {
+      float32[i] = pcmData[i] / 32768;
     }
 
     var buffer = audioContext.createBuffer(1, float32.length, 24000);
@@ -196,6 +303,9 @@
     isPaused = !isPaused;
     if (isPaused) {
       stopAllAudio();
+      stopAudioStream();
+    } else if (geminiWs && geminiWs.readyState === 1) {
+      startAudioStream();
     }
     pauseBtn.textContent = isPaused ? 'Resume' : 'Pause';
     pauseBtn.classList.toggle('paused', isPaused);
@@ -214,12 +324,18 @@
       clearTimeout(reconnectTimeout);
       reconnectTimeout = null;
     }
-    if (ws) {
-      ws.onclose = null;
-      ws.onerror = null;
-      ws.close();
-      ws = null;
+    if (geminiWs) {
+      geminiWs.onclose = null;
+      geminiWs.onerror = null;
+      geminiWs.close();
+      geminiWs = null;
     }
+    if (statusWs) {
+      statusWs.onclose = null;
+      statusWs.close();
+      statusWs = null;
+    }
+    stopAudioStream();
     stopAllAudio();
     if (audioElement) {
       audioElement.pause();
@@ -233,6 +349,7 @@
       mediaDestination = null;
     }
     if (timerInterval) clearInterval(timerInterval);
+    selectedLanguage = null;
     isPaused = false;
     pauseBtn.textContent = 'Pause';
     pauseBtn.classList.remove('paused');
