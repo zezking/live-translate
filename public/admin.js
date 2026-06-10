@@ -4,6 +4,7 @@
   const loginBtn = document.getElementById('login-btn');
   const loginError = document.getElementById('login-error');
   const statusEl = document.getElementById('status');
+  const modelRadios = document.getElementById('model-radios');
   const languageCheckboxes = document.getElementById('language-checkboxes');
   const levelMeter = document.getElementById('level-meter');
   const levelDb = document.getElementById('level-db');
@@ -80,29 +81,53 @@
   }
 
   function init() {
+    loadProviders();
     loadLanguages();
     loadQRCode();
-    loadTierStatus();
+    loadKeyStatus();
   }
 
-  async function loadTierStatus() {
+  async function loadProviders() {
+    try {
+      const res = await fetch('/api/providers');
+      const data = await res.json();
+      modelRadios.innerHTML = '';
+      data.providers.forEach((p) => {
+        const label = document.createElement('label');
+        label.className = 'model-radio';
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'provider';
+        radio.value = p.id;
+        radio.checked = p.id === data.default;
+        label.appendChild(radio);
+        label.appendChild(document.createTextNode(p.label));
+        modelRadios.appendChild(label);
+      });
+    } catch (e) {
+      modelRadios.innerHTML = '<span style="color:#999">No providers configured</span>';
+    }
+  }
+
+  async function loadKeyStatus() {
     try {
       const res = await authFetch('/api/key-status');
       const data = await res.json();
       const badge = document.getElementById('tier-badge');
-      if (data.tier === 'free') {
-        badge.textContent = 'Free Tier';
-        badge.className = 'tier-badge tier-free';
-        isFreeTier = true;
-        statCost.textContent = 'Free';
-      } else if (data.tier === 'paid') {
-        badge.textContent = 'Paid Tier';
-        badge.className = 'tier-badge tier-paid';
-    statCost.textContent = isFreeTier ? 'Free' : '$0.00';
-      } else {
-        badge.textContent = 'Unknown';
-        badge.className = 'tier-badge';
+      const parts = [];
+      if (data.keys.gemini) {
+        parts.push('Gemini: ' + data.keys.gemini);
       }
+      if (data.keys.qwen) {
+        parts.push('Qwen: ' + data.keys.qwen);
+      }
+      if (data.tier) {
+        parts.push(data.tier + ' tier');
+        isFreeTier = data.tier === 'free';
+      }
+      badge.textContent = parts.length ? parts.join(' · ') : 'No keys';
+      badge.className = 'tier-badge' + (data.tier === 'free' ? ' tier-free' : data.tier === 'paid' ? ' tier-paid' : '');
+      statCost.textContent = isFreeTier ? 'Free' : '$0.00';
     } catch (e) {
       document.getElementById('tier-badge').textContent = 'Error';
     }
@@ -190,10 +215,25 @@
     levelDb.textContent = '-- dB';
   }
 
+  function getSelectedProvider() {
+    const checked = modelRadios.querySelector('input[type="radio"]:checked');
+    return checked ? checked.value : null;
+  }
+
+  function disableModelRadios(disabled) {
+    const radios = modelRadios.querySelectorAll('input[type="radio"]');
+    radios.forEach((r) => { r.disabled = disabled; });
+  }
+
   startBtn.addEventListener('click', async () => {
     const languages = getEnabledLanguages();
     if (languages.length === 0) {
       alert('Please select at least one language.');
+      return;
+    }
+    const provider = getSelectedProvider();
+    if (!provider) {
+      alert('No translation model available. Check API keys.');
       return;
     }
     startBtn.disabled = true;
@@ -203,7 +243,7 @@
       await authFetch('/api/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ languages }),
+        body: JSON.stringify({ languages, provider }),
       });
 
       setStatus('Translating', true);
@@ -212,6 +252,7 @@
       startAudioLevel();
       startPolling();
       disableLanguageCheckboxes(true);
+      disableModelRadios(true);
     } catch (err) {
       alert('Failed to start: ' + err.message);
       startBtn.disabled = false;
@@ -240,6 +281,7 @@
     statTimer.textContent = '00:00:00';
     statCost.textContent = '$0.00';
     disableLanguageCheckboxes(false);
+    disableModelRadios(false);
   });
 
   printQrBtn.addEventListener('click', () => {

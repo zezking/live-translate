@@ -1,4 +1,5 @@
-import { TranslationSession } from './translation-session.js';
+import { GeminiTranslationSession } from './gemini-translation-session.js';
+import { QwenTranslationSession } from './qwen-translation-session.js';
 import { EventEmitter } from 'events';
 
 const LANGUAGES = [
@@ -9,12 +10,23 @@ const LANGUAGES = [
   { code: 'fa', label: 'فارسی (Farsi)' },
 ];
 
+const PROVIDERS = {
+  gemini: {
+    label: 'Gemini 2.5 Flash',
+    SessionClass: GeminiTranslationSession,
+  },
+  qwen: {
+    label: 'Qwen Live Translate',
+    SessionClass: QwenTranslationSession,
+  },
+};
+
 export class SessionManager extends EventEmitter {
-  constructor(apiKey) {
+  constructor() {
     super();
-    this.apiKey = apiKey;
     this.sessions = new Map();
     this.enabledLanguages = new Set(LANGUAGES.map((l) => l.code));
+    this.provider = null;
     this.isRunning = false;
     this.isPaused = false;
     this.startTime = null;
@@ -24,16 +36,32 @@ export class SessionManager extends EventEmitter {
     return LANGUAGES;
   }
 
+  static get PROVIDERS() {
+    return PROVIDERS;
+  }
+
   setEnabledLanguages(codes) {
     this.enabledLanguages = new Set(codes);
   }
 
-  async start() {
+  async start(apiKeys, provider) {
     if (this.isRunning) return;
 
+    const apiKey = apiKeys[provider];
+    if (!apiKey) {
+      throw new Error(`No API key configured for provider: ${provider}`);
+    }
+
+    const { SessionClass } = PROVIDERS[provider];
+    if (!SessionClass) {
+      throw new Error(`Unknown provider: ${provider}`);
+    }
+
+    this.provider = provider;
     const promises = [];
+
     for (const code of this.enabledLanguages) {
-      const session = new TranslationSession(this.apiKey, code);
+      const session = new SessionClass(apiKey, code);
 
       session.on('audio', (buffer) => {
         this.emit('audio', { languageCode: code, buffer });
@@ -107,11 +135,14 @@ export class SessionManager extends EventEmitter {
     return {
       isRunning: this.isRunning,
       isPaused: this.isPaused,
+      provider: this.provider,
       elapsedSeconds: elapsed,
       activeLanguages: Array.from(this.sessions.keys()),
       totalInputMinutes: totalInput,
       totalOutputMinutes: totalOutput,
-      estimatedCost: totalInput * 0.0053 + totalOutput * 0.0315,
+      estimatedCost: this.provider === 'gemini'
+        ? totalInput * 0.0053 + totalOutput * 0.0315
+        : null,
     };
   }
 }

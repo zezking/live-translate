@@ -95,6 +95,25 @@ body {
   gap: 12px;
 }
 
+.model-radios {
+  display: flex;
+  gap: 16px;
+}
+
+.model-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.model-radio input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #fff;
+}
+
 .lang-checkbox {
   display: flex;
   align-items: center;

@@ -15,14 +15,20 @@ const server = createServer(app);
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'centrechurch';
 
-const apiKey = process.env.GEMINI_API_KEY;
+const apiKeys = {
+  gemini: process.env.GEMINI_API_KEY,
+  qwen: process.env.DASHSCOPE_API_KEY,
+};
+
 const audioCapture = new AudioCapture();
-const sessionManager = new SessionManager(apiKey);
+const sessionManager = new SessionManager();
 const broadcaster = new AudioBroadcaster(server);
 
 let cachedTier = null;
 
-async function detectTier() {
+async function detectGeminiTier() {
+  const apiKey = apiKeys.gemini;
+  if (!apiKey) return 'missing';
   if (cachedTier !== null) return cachedTier;
   try {
     const ai = new GoogleGenAI({ apiKey });
@@ -82,7 +88,10 @@ sessionManager.on('transcription', ({ languageCode, type, text }) => {
 
 app.get('/api/status', async (req, res) => {
   const stats = sessionManager.getStats();
-  const tier = await detectTier();
+  let tier = null;
+  if (stats.provider === 'gemini' || (!stats.provider && apiKeys.gemini)) {
+    tier = await detectGeminiTier();
+  }
   res.json({
     ...stats,
     tier,
@@ -92,10 +101,27 @@ app.get('/api/status', async (req, res) => {
   });
 });
 
+app.get('/api/providers', (req, res) => {
+  const providers = [];
+  if (apiKeys.gemini) {
+    providers.push({ id: 'gemini', label: 'Gemini 2.5 Flash' });
+  }
+  if (apiKeys.qwen) {
+    providers.push({ id: 'qwen', label: 'Qwen Live Translate' });
+  }
+  res.json({ providers, default: providers.length > 0 ? providers[0].id : null });
+});
+
 app.get('/api/key-status', requireAdmin, async (req, res) => {
-  const tier = await detectTier();
-  const keyPrefix = apiKey ? apiKey.slice(0, 10) + '...' : 'missing';
-  res.json({ tier, keyPrefix });
+  const result = { keys: {} };
+  if (apiKeys.gemini) {
+    result.keys.gemini = apiKeys.gemini.slice(0, 10) + '...';
+    result.tier = await detectGeminiTier();
+  }
+  if (apiKeys.qwen) {
+    result.keys.qwen = apiKeys.qwen.slice(0, 10) + '...';
+  }
+  res.json(result);
 });
 
 app.get('/api/languages', (req, res) => {
@@ -109,13 +135,14 @@ app.get('/api/qrcode', requireAdmin, async (req, res) => {
 
 app.post('/api/start', requireAdmin, async (req, res) => {
   try {
-    const { languages } = req.body || {};
+    const { languages, provider } = req.body || {};
     if (languages) {
       sessionManager.setEnabledLanguages(languages);
     }
-    await sessionManager.start();
+    const selectedProvider = provider || (apiKeys.gemini ? 'gemini' : 'qwen');
+    await sessionManager.start(apiKeys, selectedProvider);
     audioCapture.start();
-    res.json({ status: 'started' });
+    res.json({ status: 'started', provider: selectedProvider });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -174,5 +201,6 @@ server.listen(PORT, '0.0.0.0', async () => {
   console.log(`  Admin:       http://localhost:${PORT}/admin`);
   console.log(`  Attendee:    http://${ip}:${PORT}`);
   console.log(`  Interpreter: http://${ip}:${PORT}/interpreter`);
+  console.log(`  Providers:   ${[apiKeys.gemini && 'gemini', apiKeys.qwen && 'qwen'].filter(Boolean).join(', ') || 'none'}`);
   console.log(`  Press Ctrl+C to stop\n`);
 });

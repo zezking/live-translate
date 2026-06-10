@@ -1,7 +1,7 @@
 import { GoogleGenAI, Modality } from '@google/genai';
 import { EventEmitter } from 'events';
 
-export class TranslationSession extends EventEmitter {
+export class GeminiTranslationSession extends EventEmitter {
   constructor(apiKey, languageCode) {
     super();
     this.apiKey = apiKey;
