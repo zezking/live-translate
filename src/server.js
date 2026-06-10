@@ -20,6 +20,14 @@ const broadcaster = new AudioBroadcaster(server);
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'attendee.html'));
+});
+
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'admin.html'));
+});
+
 audioCapture.on('chunk', (chunk) => {
   sessionManager.sendAudio(chunk);
 });
@@ -48,7 +56,7 @@ app.get('/api/qrcode', async (req, res) => {
 
 app.post('/api/start', async (req, res) => {
   try {
-    const { languages } = req.body;
+    const { languages } = req.body || {};
     if (languages) {
       sessionManager.setEnabledLanguages(languages);
     }
