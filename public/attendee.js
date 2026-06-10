@@ -79,25 +79,14 @@
       reconnectTimeout = null;
     }
 
-    var wsUrl = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?access_token=' + encodeURIComponent(token);
+    var wsUrl = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=' + encodeURIComponent(token);
 
     geminiWs = new WebSocket(wsUrl);
 
     geminiWs.onopen = function () {
-      var setupMessage = {
-        setup: {
-          model: 'models/gemini-3.5-live-translate-preview',
-          generationConfig: {
-            responseModalities: ['AUDIO'],
-            outputAudioTranscription: {},
-            translationConfig: {
-              targetLanguageCode: languageCode,
-              echoTargetLanguage: false,
-            },
-          },
-        },
-      };
-      geminiWs.send(JSON.stringify(setupMessage));
+      geminiWs.send(JSON.stringify({
+        setup: { model: 'models/gemini-3.5-live-translate-preview' }
+      }));
     };
 
     var setupComplete = false;
