@@ -39,6 +39,7 @@
     playerLanguage.textContent = label;
     selectView.classList.add('hidden');
     playerView.classList.remove('hidden');
+    startAudio();
     connectWebSocket();
   }
 
@@ -49,7 +50,9 @@
     ws.onopen = () => {
       reconnectOverlay.classList.add('hidden');
       ws.send(JSON.stringify({ type: 'selectLanguage', languageCode: selectedLanguage }));
-      startAudio();
+      if (audioContext && audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
       startTimer();
     };
 
@@ -80,16 +83,30 @@
   }
 
   function startAudio() {
-    if (audioContext) return;
+    if (audioContext) {
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      return;
+    }
     audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
     gainNode = audioContext.createGain();
     gainNode.connect(audioContext.destination);
     gainNode.gain.value = volumeSlider.value / 100;
     nextPlayTime = audioContext.currentTime;
+
+    if (audioContext.state === 'suspended') {
+      audioContext.resume();
+    }
   }
 
   function queueAudio(base64Data) {
     if (!audioContext) return;
+
+    if (audioContext.state === 'suspended') {
+      audioContext.resume();
+      return;
+    }
 
     const raw = atob(base64Data);
     const pcm = new Int16Array(raw.length / 2);
@@ -129,7 +146,14 @@
     }, 1000);
   }
 
+  function unlockAudio() {
+    if (audioContext && audioContext.state === 'suspended') {
+      audioContext.resume();
+    }
+  }
+
   pauseBtn.addEventListener('click', () => {
+    unlockAudio();
     isPaused = !isPaused;
     pauseBtn.textContent = isPaused ? 'Resume' : 'Pause';
     pauseBtn.classList.toggle('paused', isPaused);
@@ -137,6 +161,7 @@
   });
 
   volumeSlider.addEventListener('input', () => {
+    unlockAudio();
     if (gainNode) {
       gainNode.gain.value = volumeSlider.value / 100;
     }
