@@ -3,6 +3,7 @@ import express from 'express';
 import { createServer } from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { GoogleGenAI } from '@google/genai';
 import { AudioCapture } from './audio-capture.js';
 import { SessionManager } from './session-manager.js';
 import { AudioBroadcaster } from './audio-broadcaster.js';
@@ -13,9 +14,36 @@ const app = express();
 const server = createServer(app);
 const PORT = process.env.PORT || 3000;
 
+const apiKey = process.env.GEMINI_API_KEY;
 const audioCapture = new AudioCapture();
-const sessionManager = new SessionManager(process.env.GEMINI_API_KEY);
+const sessionManager = new SessionManager(apiKey);
 const broadcaster = new AudioBroadcaster(server);
+
+let cachedTier = null;
+
+async function detectTier() {
+  if (cachedTier !== null) return cachedTier;
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: 'hi',
+    });
+    cachedTier = 'paid';
+  } catch (err) {
+    const msg = err.message || '';
+    if (msg.includes('free_tier')) {
+      cachedTier = 'free';
+    } else if (msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429')) {
+      cachedTier = 'free';
+    } else if (msg.includes('PERMISSION_DENIED') || msg.includes('403')) {
+      cachedTier = 'unknown';
+    } else {
+      cachedTier = 'paid';
+    }
+  }
+  return cachedTier;
+}
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -44,13 +72,22 @@ sessionManager.on('transcription', ({ languageCode, type, text }) => {
   broadcaster.broadcastTranscription(languageCode, type, text);
 });
 
-app.get('/api/status', (req, res) => {
+app.get('/api/status', async (req, res) => {
   const stats = sessionManager.getStats();
+  const tier = await detectTier();
   res.json({
     ...stats,
+    tier,
+    estimatedCost: tier === 'free' ? 0 : stats.estimatedCost,
     attendees: broadcaster.getClientCount(),
     attendeesByLanguage: broadcaster.getClientsByLanguage(),
   });
+});
+
+app.get('/api/key-status', async (req, res) => {
+  const tier = await detectTier();
+  const keyPrefix = apiKey ? apiKey.slice(0, 10) + '...' : 'missing';
+  res.json({ tier, keyPrefix });
 });
 
 app.get('/api/languages', (req, res) => {

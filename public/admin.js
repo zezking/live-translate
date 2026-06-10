@@ -16,6 +16,7 @@
 
   let levelEventSource = null;
   let pollInterval = null;
+  let isFreeTier = false;
 
   const meterFill = document.createElement('div');
   meterFill.className = 'level-meter-fill';
@@ -24,6 +25,30 @@
   function init() {
     loadLanguages();
     loadQRCode();
+    loadTierStatus();
+  }
+
+  async function loadTierStatus() {
+    try {
+      const res = await fetch('/api/key-status');
+      const data = await res.json();
+      const badge = document.getElementById('tier-badge');
+      if (data.tier === 'free') {
+        badge.textContent = 'Free Tier';
+        badge.className = 'tier-badge tier-free';
+        isFreeTier = true;
+        statCost.textContent = 'Free';
+      } else if (data.tier === 'paid') {
+        badge.textContent = 'Paid Tier';
+        badge.className = 'tier-badge tier-paid';
+    statCost.textContent = isFreeTier ? 'Free' : '$0.00';
+      } else {
+        badge.textContent = 'Unknown';
+        badge.className = 'tier-badge';
+      }
+    } catch (e) {
+      document.getElementById('tier-badge').textContent = 'Error';
+    }
   }
 
   async function loadLanguages() {
@@ -71,7 +96,7 @@
       const res = await fetch('/api/status');
       const data = await res.json();
       statAttendees.textContent = data.attendees;
-      statCost.textContent = '$' + data.estimatedCost.toFixed(2);
+      statCost.textContent = isFreeTier ? 'Free' : ('$' + data.estimatedCost.toFixed(2));
 
       if (data.elapsedSeconds > 0) {
         const h = String(Math.floor(data.elapsedSeconds / 3600)).padStart(2, '0');
