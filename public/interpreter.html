@@ -29,9 +29,18 @@
         <p id="transcript-status" class="status-text">Listening...</p>
       </div>
       <div id="transcript-body" class="transcript-body">
-        <div id="input-text" class="text-block input-text"></div>
-        <div class="text-divider"></div>
-        <div id="output-text" class="text-block output-text"></div>
+        <div class="transcript-panel">
+          <div class="panel-label">Original</div>
+          <div id="input-scroll" class="panel-scroll">
+            <div id="input-text" class="text-block input-text"></div>
+          </div>
+        </div>
+        <div class="transcript-panel">
+          <div class="panel-label" id="output-label">Translation</div>
+          <div id="output-scroll" class="panel-scroll">
+            <div id="output-text" class="text-block output-text"></div>
+          </div>
+        </div>
       </div>
       <div class="transcript-footer">
         <button id="pause-btn" class="pause-btn">Pause</button>

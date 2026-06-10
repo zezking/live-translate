@@ -6,6 +6,9 @@
   var transcriptStatus = document.getElementById('transcript-status');
   var inputText = document.getElementById('input-text');
   var outputText = document.getElementById('output-text');
+  var inputScroll = document.getElementById('input-scroll');
+  var outputScroll = document.getElementById('output-scroll');
+  var outputLabel = document.getElementById('output-label');
   var transcriptBody = document.getElementById('transcript-body');
   var pauseBtn = document.getElementById('pause-btn');
   var clearBtn = document.getElementById('clear-btn');
@@ -14,9 +17,22 @@
 
   var ws = null;
   var selectedLanguage = null;
+  var selectedLabel = null;
   var isPaused = false;
   var inputBuffer = '';
   var outputBuffer = '';
+  var syncingScroll = false;
+
+  function syncScroll(source, target) {
+    if (syncingScroll) return;
+    syncingScroll = true;
+    var ratio = source.scrollTop / (source.scrollHeight - source.clientHeight || 1);
+    target.scrollTop = ratio * (target.scrollHeight - target.clientHeight);
+    syncingScroll = false;
+  }
+
+  inputScroll.addEventListener('scroll', function () { syncScroll(inputScroll, outputScroll); });
+  outputScroll.addEventListener('scroll', function () { syncScroll(outputScroll, inputScroll); });
 
   function init() {
     fetch('/api/languages')
@@ -35,7 +51,8 @@
 
   function selectLanguage(code, label) {
     selectedLanguage = code;
-    transcriptLanguage.textContent = label;
+    selectedLabel = label;
+    outputLabel.textContent = label;
     selectView.classList.add('hidden');
     transcriptView.classList.remove('hidden');
     connectWebSocket();
@@ -59,6 +76,7 @@
         if (msg.transcriptionType === 'input') {
           inputBuffer += msg.text;
           inputText.textContent = inputBuffer;
+          autoScroll();
         } else if (msg.transcriptionType === 'output') {
           outputBuffer += msg.text;
           outputText.textContent = outputBuffer;
@@ -88,7 +106,8 @@
   }
 
   function autoScroll() {
-    transcriptBody.scrollTop = transcriptBody.scrollHeight;
+    inputScroll.scrollTop = inputScroll.scrollHeight;
+    outputScroll.scrollTop = outputScroll.scrollHeight;
   }
 
   pauseBtn.addEventListener('click', function () {
