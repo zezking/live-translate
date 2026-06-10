@@ -20,6 +20,8 @@
   let nextPlayTime = 0;
   let timerInterval = null;
   let sessionStartTime = null;
+  let reconnectTimeout = null;
+  let activeSources = [];
 
   function init() {
     fetch('/api/languages')
@@ -46,19 +48,25 @@
   }
 
   function connectWebSocket() {
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout);
+      reconnectTimeout = null;
+    }
+
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(`${protocol}//${location.host}/ws`);
+    const currentLang = selectedLanguage;
 
     ws.onopen = () => {
       reconnectOverlay.classList.add('hidden');
-      ws.send(JSON.stringify({ type: 'selectLanguage', languageCode: selectedLanguage }));
+      ws.send(JSON.stringify({ type: 'selectLanguage', languageCode: currentLang }));
       resumeAudio();
       startTimer();
     };
 
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
-      if (msg.type === 'audio' && !isPaused) {
+      if (msg.type === 'audio' && !isPaused && msg.languageCode === selectedLanguage) {
         queueAudio(msg.data);
       }
       if (msg.type === 'status') {
@@ -73,8 +81,10 @@
     };
 
     ws.onclose = () => {
-      reconnectOverlay.classList.remove('hidden');
-      setTimeout(connectWebSocket, 2000);
+      if (selectedLanguage === currentLang) {
+        reconnectOverlay.classList.remove('hidden');
+        reconnectTimeout = setTimeout(connectWebSocket, 2000);
+      }
     };
 
     ws.onerror = () => {
@@ -147,6 +157,11 @@
     var source = audioContext.createBufferSource();
     source.buffer = buffer;
     source.connect(gainNode);
+    source.onended = function () {
+      var idx = activeSources.indexOf(source);
+      if (idx > -1) activeSources.splice(idx, 1);
+    };
+    activeSources.push(source);
 
     var now = audioContext.currentTime;
     if (nextPlayTime < now) {
@@ -154,6 +169,14 @@
     }
     source.start(nextPlayTime);
     nextPlayTime += buffer.duration;
+  }
+
+  function stopAllAudio() {
+    for (var i = activeSources.length - 1; i >= 0; i--) {
+      try { activeSources[i].stop(); } catch (e) {}
+    }
+    activeSources = [];
+    nextPlayTime = audioContext ? audioContext.currentTime : 0;
   }
 
   function startTimer() {
@@ -171,6 +194,9 @@
   pauseBtn.addEventListener('click', function () {
     resumeAudio();
     isPaused = !isPaused;
+    if (isPaused) {
+      stopAllAudio();
+    }
     pauseBtn.textContent = isPaused ? 'Resume' : 'Pause';
     pauseBtn.classList.toggle('paused', isPaused);
     playerStatus.textContent = isPaused ? 'Paused' : 'Listening...';
@@ -184,7 +210,17 @@
   });
 
   changeLangBtn.addEventListener('click', function () {
-    if (ws) ws.close();
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout);
+      reconnectTimeout = null;
+    }
+    if (ws) {
+      ws.onclose = null;
+      ws.onerror = null;
+      ws.close();
+      ws = null;
+    }
+    stopAllAudio();
     if (audioElement) {
       audioElement.pause();
       audioElement.srcObject = null;
@@ -193,6 +229,8 @@
     if (audioContext) {
       audioContext.close();
       audioContext = null;
+      gainNode = null;
+      mediaDestination = null;
     }
     if (timerInterval) clearInterval(timerInterval);
     isPaused = false;
