@@ -10,11 +10,41 @@ function mapLang(code) {
   return LANG_MAP[code] || code;
 }
 
+const VOICE_LIST = [
+  { value: 'Tina', label: 'Tina', description: 'Sweet and warm — like a cup of milk tea' },
+  { value: 'Ethan', label: 'Ethan', description: 'Standard Mandarin, sunny and warm' },
+  { value: 'Serena', label: 'Serena', description: 'Gentle young woman' },
+  { value: 'Maia', label: 'Maia', description: 'Intellect meets gentleness' },
+  { value: 'Andre', label: 'Andre', description: 'Magnetic, natural, and steady male voice' },
+  { value: 'Harvey', label: 'Harvey', description: 'Low, mellow voice — warm and rich' },
+  { value: 'Theo Calm', label: 'Theo Calm', description: 'Calm and reassuring' },
+  { value: 'Raymond', label: 'Raymond', description: 'Bright male voice' },
+  { value: 'Liora Mira', label: 'Liora Mira', description: 'Gentle and warm, everyday charm' },
+  { value: 'Cindy', label: 'Cindy', description: 'Soft, sweet young woman' },
+  { value: 'Evan', label: 'Evan', description: 'Young, warm male voice' },
+  { value: 'Jennifer', label: 'Jennifer', description: 'Premium American English female' },
+  { value: 'Mione', label: 'Mione', description: 'Mature British English female' },
+  { value: 'Aiden', label: 'Aiden', description: 'American English male, friendly' },
+  { value: 'Katerina', label: 'Katerina', description: 'Mature, expressive female voice' },
+  { value: 'Mia', label: 'Mia', description: 'Gentle and reflective' },
+  { value: 'Emilien', label: 'Emilien', description: 'Romantic French male voice' },
+  { value: 'Sonrisa', label: 'Sonrisa', description: 'Warm Latin American female' },
+  { value: 'Bodega', label: 'Bodega', description: 'Warm Spanish male voice' },
+  { value: 'Sohee', label: 'Sohee', description: 'Warm Korean female voice' },
+];
+
+const SUPPORTED_VOICES = VOICE_LIST.map((v) => v.value);
+
 export class QwenTranslationSession extends EventEmitter {
-  constructor(apiKey, languageCode) {
+  constructor(apiKey, languageCode, hotwords = {}, voiceConfig = {}) {
     super();
     this.apiKey = apiKey;
     this.languageCode = languageCode;
+    this.hotwords = hotwords;
+    this.enableVoiceClone = voiceConfig.enableVoiceClone !== false;
+    this.voiceName = SUPPORTED_VOICES.includes(voiceConfig.voice)
+      ? voiceConfig.voice
+      : 'Tina';
     this.ws = null;
     this.isActive = false;
     this.inputMinutes = 0;
@@ -22,6 +52,10 @@ export class QwenTranslationSession extends EventEmitter {
     this._audioParts = [];
     this._lastOutputText = '';
     this._lastInputText = '';
+  }
+
+  static get VOICE_LIST() {
+    return VOICE_LIST;
   }
 
   async connect() {
@@ -50,23 +84,27 @@ export class QwenTranslationSession extends EventEmitter {
       });
 
       this.ws.on('open', () => {
+        const sessionConfig = {
+          modalities: ['text', 'audio'],
+          input_audio_transcription: {
+            language: 'en',
+            model: 'qwen3-asr-flash-realtime',
+          },
+          translation: this._buildTranslationConfig(targetLang),
+        };
+
+        if (this.enableVoiceClone) {
+          sessionConfig.voice = 'default';
+          sessionConfig.enable_voice_clone = true;
+          sessionConfig.voice_clone_options = { frequency: 'once' };
+        } else {
+          sessionConfig.voice = this.voiceName;
+          sessionConfig.enable_voice_clone = false;
+        }
+
         const sessionUpdate = {
           type: 'session.update',
-          session: {
-            modalities: ['text', 'audio'],
-            voice: 'default',
-            input_audio_transcription: {
-              language: 'en',
-              model: 'qwen3-asr-flash-realtime',
-            },
-            translation: {
-              language: targetLang,
-            },
-            enable_voice_clone: true,
-            voice_clone_options: {
-              frequency: 'once',
-            },
-          },
+          session: sessionConfig,
         };
         this.ws.send(JSON.stringify(sessionUpdate));
       });
@@ -97,6 +135,15 @@ export class QwenTranslationSession extends EventEmitter {
         this.emit('closed', { languageCode: this.languageCode, reason: reason.toString() });
       });
     });
+  }
+
+  _buildTranslationConfig(targetLang) {
+    const config = { language: targetLang };
+    const phrases = this.hotwords[targetLang];
+    if (phrases && Object.keys(phrases).length > 0) {
+      config.corpus = { phrases };
+    }
+    return config;
   }
 
   _handleMessage(msg) {

@@ -18,6 +18,10 @@
   const qrImage = document.getElementById('qr-image');
   const qrUrl = document.getElementById('qr-url');
   const printQrBtn = document.getElementById('print-qr-btn');
+  const voiceSection = document.getElementById('voice-section');
+  const voiceCloneCheckbox = document.getElementById('voice-clone-checkbox');
+  const voiceSelectGroup = document.getElementById('voice-select-group');
+  const voiceSelect = document.getElementById('voice-select');
 
   let levelEventSource = null;
   let pollInterval = null;
@@ -83,6 +87,7 @@
   function init() {
     loadProviders();
     loadLanguages();
+    loadVoices();
     loadQRCode();
     loadKeyStatus();
   }
@@ -100,14 +105,46 @@
         radio.name = 'provider';
         radio.value = p.id;
         radio.checked = p.id === data.default;
+        radio.addEventListener('change', updateVoiceSection);
         label.appendChild(radio);
         label.appendChild(document.createTextNode(p.label));
         modelRadios.appendChild(label);
       });
+      updateVoiceSection();
     } catch (e) {
       modelRadios.innerHTML = '<span style="color:#999">No providers configured</span>';
     }
   }
+
+  async function loadVoices() {
+    try {
+      const res = await fetch('/api/voices');
+      const voices = await res.json();
+      voiceSelect.innerHTML = '';
+      voices.forEach((v) => {
+        const option = document.createElement('option');
+        option.value = v.value;
+        option.textContent = `${v.label} — ${v.description}`;
+        voiceSelect.appendChild(option);
+      });
+    } catch (e) {
+      voiceSelect.innerHTML = '<option>Tina</option>';
+    }
+  }
+
+  function updateVoiceSection() {
+    const provider = getSelectedProvider();
+    if (provider === 'qwen') {
+      voiceSection.style.display = 'block';
+      voiceSelectGroup.style.display = voiceCloneCheckbox.checked ? 'none' : 'block';
+    } else {
+      voiceSection.style.display = 'none';
+    }
+  }
+
+  voiceCloneCheckbox.addEventListener('change', () => {
+    voiceSelectGroup.style.display = voiceCloneCheckbox.checked ? 'none' : 'block';
+  });
 
   async function loadKeyStatus() {
     try {
@@ -225,6 +262,18 @@
     radios.forEach((r) => { r.disabled = disabled; });
   }
 
+  function disableVoiceControls(disabled) {
+    voiceCloneCheckbox.disabled = disabled;
+    voiceSelect.disabled = disabled;
+  }
+
+  function getVoiceConfig() {
+    return {
+      enableVoiceClone: voiceCloneCheckbox.checked,
+      voice: voiceSelect.value,
+    };
+  }
+
   startBtn.addEventListener('click', async () => {
     const languages = getEnabledLanguages();
     if (languages.length === 0) {
@@ -243,7 +292,7 @@
       await authFetch('/api/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ languages, provider }),
+        body: JSON.stringify({ languages, provider, voiceConfig: getVoiceConfig() }),
       });
 
       setStatus('Translating', true);
@@ -253,6 +302,7 @@
       startPolling();
       disableLanguageCheckboxes(true);
       disableModelRadios(true);
+      disableVoiceControls(true);
     } catch (err) {
       alert('Failed to start: ' + err.message);
       startBtn.disabled = false;
@@ -282,6 +332,7 @@
     statCost.textContent = '$0.00';
     disableLanguageCheckboxes(false);
     disableModelRadios(false);
+    disableVoiceControls(false);
   });
 
   printQrBtn.addEventListener('click', () => {

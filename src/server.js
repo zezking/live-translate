@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import { AudioCapture } from './audio-capture.js';
 import { SessionManager } from './session-manager.js';
+import { QwenTranslationSession } from './qwen-translation-session.js';
 import { AudioBroadcaster } from './audio-broadcaster.js';
 import { generateQRCode, getLocalIP } from './qr-generator.js';
 
@@ -104,7 +105,7 @@ app.get('/api/status', async (req, res) => {
 app.get('/api/providers', (req, res) => {
   const providers = [];
   if (apiKeys.gemini) {
-    providers.push({ id: 'gemini', label: 'Gemini 2.5 Flash' });
+    providers.push({ id: 'gemini', label: 'Gemini Live Translate' });
   }
   if (apiKeys.qwen) {
     providers.push({ id: 'qwen', label: 'Qwen Live Translate' });
@@ -128,6 +129,10 @@ app.get('/api/languages', (req, res) => {
   res.json(SessionManager.LANGUAGES);
 });
 
+app.get('/api/voices', (req, res) => {
+  res.json(QwenTranslationSession.VOICE_LIST);
+});
+
 app.get('/api/qrcode', requireAdmin, async (req, res) => {
   const { url, dataUrl } = await generateQRCode(PORT);
   res.json({ url, dataUrl });
@@ -135,12 +140,12 @@ app.get('/api/qrcode', requireAdmin, async (req, res) => {
 
 app.post('/api/start', requireAdmin, async (req, res) => {
   try {
-    const { languages, provider } = req.body || {};
+    const { languages, provider, voiceConfig } = req.body || {};
     if (languages) {
       sessionManager.setEnabledLanguages(languages);
     }
     const selectedProvider = provider || (apiKeys.gemini ? 'gemini' : 'qwen');
-    await sessionManager.start(apiKeys, selectedProvider);
+    await sessionManager.start(apiKeys, selectedProvider, voiceConfig || {});
     audioCapture.start();
     res.json({ status: 'started', provider: selectedProvider });
   } catch (err) {

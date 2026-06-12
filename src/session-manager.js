@@ -1,6 +1,25 @@
 import { GeminiTranslationSession } from './gemini-translation-session.js';
 import { QwenTranslationSession } from './qwen-translation-session.js';
 import { EventEmitter } from 'events';
+import { readFileSync, existsSync } from 'fs';
+import { fileURLToPath } from 'url';
+import path from 'path';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function loadHotwords() {
+  const hotwordsPath = path.join(__dirname, 'hotwords.json');
+  if (existsSync(hotwordsPath)) {
+    try {
+      return JSON.parse(readFileSync(hotwordsPath, 'utf-8'));
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+const HOTWORDS = loadHotwords();
 
 const LANGUAGES = [
   { code: 'zh-Hans', label: '中文 (Mandarin)' },
@@ -12,7 +31,7 @@ const LANGUAGES = [
 
 const PROVIDERS = {
   gemini: {
-    label: 'Gemini 2.5 Flash',
+    label: 'Gemini Live Translate',
     SessionClass: GeminiTranslationSession,
   },
   qwen: {
@@ -44,7 +63,7 @@ export class SessionManager extends EventEmitter {
     this.enabledLanguages = new Set(codes);
   }
 
-  async start(apiKeys, provider) {
+  async start(apiKeys, provider, voiceConfig = {}) {
     if (this.isRunning) return;
 
     const apiKey = apiKeys[provider];
@@ -61,7 +80,9 @@ export class SessionManager extends EventEmitter {
     const promises = [];
 
     for (const code of this.enabledLanguages) {
-      const session = new SessionClass(apiKey, code);
+      const session = provider === 'qwen'
+        ? new SessionClass(apiKey, code, HOTWORDS, voiceConfig)
+        : new SessionClass(apiKey, code);
 
       session.on('audio', (buffer) => {
         this.emit('audio', { languageCode: code, buffer });

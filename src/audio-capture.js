@@ -13,16 +13,23 @@ export class AudioCapture extends EventEmitter {
     this.recorder = null;
     this.buffer = Buffer.alloc(0);
     this.isCapturing = false;
+    this.device = process.env.AUDIO_DEVICE || null;
   }
 
   start() {
     if (this.isCapturing) return;
 
-    this.recorder = Recorder.record({
+    const opts = {
       sampleRate: SAMPLE_RATE,
       channels: CHANNELS,
       audioType: 'raw',
-    });
+    };
+
+    if (this.device) {
+      opts.device = this.device;
+    }
+
+    this.recorder = Recorder.record(opts);
 
     this.isCapturing = true;
     this.buffer = Buffer.alloc(0);
