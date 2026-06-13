@@ -154,8 +154,13 @@ app.post('/api/start', requireAdmin, async (req, res) => {
       sessionManager.setEnabledLanguages(languages);
     }
     const selectedProvider = provider || (apiKeys.gemini ? 'gemini' : 'qwen');
-    await sessionManager.start(apiKeys, selectedProvider, voiceConfig || {});
     audioCapture.start();
+    try {
+      await sessionManager.start(apiKeys, selectedProvider, voiceConfig || {});
+    } catch (err) {
+      audioCapture.stop();
+      throw err;
+    }
     res.json({ status: 'started', provider: selectedProvider });
   } catch (err) {
     res.status(500).json({ error: err.message });

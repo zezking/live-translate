@@ -105,10 +105,20 @@ export class SessionManager extends EventEmitter {
       });
 
       this.sessions.set(code, session);
-      promises.push(session.connect());
+      promises.push(
+        session.connect().catch((err) => {
+          this.emit('error', { languageCode: code, error: err.message || err });
+          this.sessions.delete(code);
+          return null;
+        }),
+      );
     }
 
-    await Promise.all(promises);
+    const results = await Promise.all(promises);
+    const connected = results.filter((r) => r === undefined);
+    if (connected.length === 0 && this.enabledLanguages.size > 0) {
+      throw new Error(`All ${this.enabledLanguages.size} language sessions failed to connect`);
+    }
     this.isRunning = true;
     this.isPaused = false;
     this.startTime = Date.now();
