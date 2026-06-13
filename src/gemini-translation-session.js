@@ -19,7 +19,7 @@ export class GeminiTranslationSession extends EventEmitter {
       model: 'gemini-3.5-live-translate-preview',
       config: {
         responseModalities: [Modality.AUDIO],
-        inputAudioTranscription: {},
+        inputAudioTranscription: { languageCodes: ['en'] },
         outputAudioTranscription: {},
         translationConfig: {
           targetLanguageCode: this.languageCode,
