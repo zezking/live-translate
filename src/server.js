@@ -84,7 +84,15 @@ sessionManager.on('audio', ({ languageCode, buffer }) => {
 });
 
 sessionManager.on('transcription', ({ languageCode, type, text }) => {
-  broadcaster.broadcastTranscription(languageCode, type, text);
+  broadcaster.sendTranscription({ languageCode, type, text });
+});
+
+sessionManager.on('error', ({ languageCode, error }) => {
+  console.error(`[${languageCode}] Qwen error: ${error}`);
+});
+
+sessionManager.on('sessionClosed', ({ languageCode, reason }) => {
+  console.error(`[${languageCode}] session closed: ${reason}`);
 });
 
 app.get('/api/status', async (req, res) => {

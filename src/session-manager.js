@@ -97,7 +97,7 @@ export class SessionManager extends EventEmitter {
       });
 
       session.on('error', (err) => {
-        this.emit('error', err);
+        this.emit('error', { languageCode: code, error: err });
       });
 
       session.on('closed', (info) => {
