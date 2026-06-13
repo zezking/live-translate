@@ -84,11 +84,12 @@ sessionManager.on('audio', ({ languageCode, buffer }) => {
 });
 
 sessionManager.on('transcription', ({ languageCode, type, text }) => {
-  broadcaster.sendTranscription({ languageCode, type, text });
+  broadcaster.broadcastTranscription(languageCode, type, text);
 });
 
 sessionManager.on('error', ({ languageCode, error }) => {
-  console.error(`[${languageCode}] Qwen error: ${error}`);
+  const msg = typeof error === 'object' && error !== null ? (error.error || error.message || JSON.stringify(error)) : error;
+  console.error(`[${languageCode}] error: ${msg}`);
 });
 
 sessionManager.on('sessionClosed', ({ languageCode, reason }) => {
