@@ -107,7 +107,6 @@ export class SessionManager extends EventEmitter {
       this.sessions.set(code, session);
       promises.push(
         session.connect().catch((err) => {
-          this.emit('error', { languageCode: code, error: err.message || err });
           this.sessions.delete(code);
           return null;
         }),
