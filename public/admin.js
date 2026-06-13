@@ -84,12 +84,50 @@
     loginBtn.disabled = false;
   }
 
-  function init() {
-    loadProviders();
-    loadLanguages();
+  async function init() {
+    await loadProviders();
+    await loadLanguages();
     loadVoices();
     loadQRCode();
     loadKeyStatus();
+    restoreSessionState();
+  }
+
+  async function restoreSessionState() {
+    try {
+      const res = await authFetch('/api/status');
+      const data = await res.json();
+      if (!data.isRunning) return;
+
+      isFreeTier = data.tier === 'free';
+
+      // restore language checkboxes
+      const activeLangs = new Set(data.activeLanguages || []);
+      const checkboxes = languageCheckboxes.querySelectorAll('input[type="checkbox"]');
+      checkboxes.forEach((cb) => {
+        cb.checked = activeLangs.has(cb.value);
+      });
+
+      // restore provider radio
+      if (data.provider) {
+        const radios = modelRadios.querySelectorAll('input[type="radio"]');
+        radios.forEach((r) => { r.checked = r.value === data.provider; });
+        updateVoiceSection();
+      }
+
+      // restore running UI
+      setStatus(data.isPaused ? 'Paused' : 'Translating', true);
+      startBtn.classList.add('hidden');
+      activeControls.classList.remove('hidden');
+      if (data.isPaused) pauseBtn.textContent = 'RESUME';
+      startAudioLevel();
+      startPolling();
+      disableLanguageCheckboxes(true);
+      disableModelRadios(true);
+      disableVoiceControls(true);
+    } catch (e) {
+      // session not running or auth failed — nothing to restore
+    }
   }
 
   async function loadProviders() {
