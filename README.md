@@ -156,15 +156,17 @@ public/
 - [ ] No graceful degradation if one language fails — others continue, but admin sees errors
 - [ ] Audio capture uses sox — no fallback on macOS if sox is missing or fails
 - [ ] No persistent logs or metrics — useful for debugging service-day issues
-- [ ] Church WiFi may have client isolation — requires hotspot/ad-hoc fallback (see Network)
+- [ ] **Church public WiFi has client isolation** — mobile devices cannot reach the server IP despite sufficient internet speed. Requires a separate local network for attendee devices
+- [ ] **Church secured WiFi too slow** — significant translation latency on "Centre Church Translation" secured network. Public WiFi is faster but not reachable from attendee devices
 
 ## Network
 
-If the church WiFi has client isolation (devices can't reach each other), use one of these workarounds:
+The church has two WiFi networks:
 
-1. **Ad-hoc network** (Option+click Wi-Fi icon → Create Network) — Mac creates its own WiFi for phones
-2. **Travel router** — connect to church WiFi, creates local network for all devices
-3. **Phone hotspot** — connect Mac to phone's hotspot, all traffic stays local
+- **Centre Church Public** — open, fast enough for translation, but has client isolation (devices cannot reach each other)
+- **Centre Church Translation** — secured, but internet speed is too slow for real-time translation
+
+Neither network currently satisfies both requirements (internet speed for API calls + local connectivity for attendee devices). This is documented in Before Production above.
 
 ## Cost
 
