@@ -75,42 +75,26 @@ export class SessionManager extends EventEmitter {
     if (!SessionClass) {
       throw new Error(`Unknown provider: ${provider}`);
     }
-
     this.provider = provider;
+    this._apiKey = apiKey;
+    this._voiceConfig = voiceConfig;
+    this._SessionClass = SessionClass;
+
     const promises = [];
 
     for (const code of this.enabledLanguages) {
-      const session = provider === 'qwen'
-        ? new SessionClass(apiKey, code, HOTWORDS, voiceConfig)
-        : new SessionClass(apiKey, code);
-
-      session.on('audio', (buffer) => {
-        this.emit('audio', { languageCode: code, buffer });
-      });
-
-      session.on('inputTranscription', (text) => {
-        this.emit('transcription', { languageCode: code, type: 'input', text });
-      });
-
-      session.on('outputTranscription', (text) => {
-        this.emit('transcription', { languageCode: code, type: 'output', text });
-      });
-
-      session.on('error', (err) => {
-        this.emit('error', { languageCode: code, error: err });
-      });
-
-      session.on('closed', (info) => {
-        this.emit('sessionClosed', info);
-      });
-
-      this.sessions.set(code, session);
-      promises.push(
-        session.connect().catch((err) => {
-          this.sessions.delete(code);
-          return null;
-        }),
-      );
+      try {
+        const session = this._createSession(code);
+        this.sessions.set(code, session);
+        promises.push(
+          session.connect().catch((err) => {
+            this.sessions.delete(code);
+            return null;
+          }),
+        );
+      } catch (err) {
+        this.emit('error', { languageCode: code, error: err.message || err });
+      }
     }
 
     const results = await Promise.all(promises);
@@ -122,6 +106,56 @@ export class SessionManager extends EventEmitter {
     this.isPaused = false;
     this.startTime = Date.now();
     this.emit('started');
+  }
+
+  _createSession(code) {
+    const session = this.provider === 'qwen'
+      ? new this._SessionClass(this._apiKey, code, HOTWORDS, this._voiceConfig)
+      : new this._SessionClass(this._apiKey, code);
+
+    session.on('audio', (buffer) => {
+      this.emit('audio', { languageCode: code, buffer });
+    });
+
+    session.on('inputTranscription', (text) => {
+      this.emit('transcription', { languageCode: code, type: 'input', text });
+    });
+
+    session.on('outputTranscription', (text) => {
+      this.emit('transcription', { languageCode: code, type: 'output', text });
+    });
+
+    session.on('error', (err) => {
+      this.emit('error', { languageCode: code, error: err });
+    });
+
+    session.on('closed', (info) => {
+      this.emit('sessionClosed', info);
+      const reason = info?.reason || '';
+      if (this.isRunning && /GoAway|duration|expired|session/i.test(reason)) {
+        this._reconnectSession(code);
+      }
+    });
+
+    return session;
+  }
+
+  _reconnectSession(code) {
+    console.log(`[${code}] session expired — reconnecting...`);
+    const old = this.sessions.get(code);
+    if (old) {
+      old.disconnect?.();
+    }
+    try {
+      const session = this._createSession(code);
+      this.sessions.set(code, session);
+      session.connect().catch((err) => {
+        this.emit('error', { languageCode: code, error: err.message || err });
+        this.sessions.delete(code);
+      });
+    } catch (err) {
+      this.emit('error', { languageCode: code, error: err.message || err });
+    }
   }
 
   sendAudio(pcmBuffer) {
