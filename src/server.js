@@ -25,18 +25,22 @@ const apiKeys = {
 let activeSource = null;
 let activeInputSource = null;
 
+const sessionManager = new SessionManager();
+const broadcaster = new AudioBroadcaster(server);
+const browserAudioSource = new BrowserAudioSource(server, ADMIN_PASSWORD);
+browserAudioSource.start();
+console.log('[browser-audio-source] WSS attached on /ws/admin-input');
+
 function createSource(inputSource) {
   if (inputSource === 'usb' || !inputSource) return new UsbAudioSource();
   if (inputSource === 'browser' || inputSource === 'system') {
-    return new BrowserAudioSource(server, ADMIN_PASSWORD);
+    return browserAudioSource;
   }
   return null;
 }
 
 activeSource = createSource('usb');
 activeSource.on('chunk', (chunk) => sessionManager.sendAudio(chunk));
-const sessionManager = new SessionManager();
-const broadcaster = new AudioBroadcaster(server);
 
 let cachedTier = null;
 
