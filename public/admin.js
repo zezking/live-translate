@@ -22,6 +22,9 @@
   const voiceCloneCheckbox = document.getElementById('voice-clone-checkbox');
   const voiceSelectGroup = document.getElementById('voice-select-group');
   const voiceSelect = document.getElementById('voice-select');
+  const sourceRadios = document.getElementById('source-radios');
+  const sourceHint = document.getElementById('source-hint');
+  const reconnectBtn = document.getElementById('reconnect-btn');
 
   let levelEventSource = null;
   let pollInterval = null;
@@ -85,6 +88,7 @@
   }
 
   async function init() {
+    renderSourceRadios();
     await loadProviders();
     await loadLanguages();
     loadVoices();
@@ -125,6 +129,7 @@
       disableLanguageCheckboxes(true);
       disableModelRadios(true);
       disableVoiceControls(true);
+      disableInputSourceRadios(true);
     } catch (e) {
       // session not running or auth failed — nothing to restore
     }
@@ -178,6 +183,50 @@
     } else {
       voiceSection.style.display = 'none';
     }
+  }
+
+  const INPUT_SOURCES = [
+    { id: 'usb', label: 'USB' },
+    { id: 'browser', label: 'Browser' },
+    { id: 'system', label: 'System' },
+  ];
+
+  const SOURCE_HINTS = {
+    usb: 'Captures from the USB device via sox.',
+    browser: 'Click START, then in the picker choose a Chrome Tab and tick Share tab audio.',
+    system: 'Click START, then in the picker choose Entire Screen and tick Share system audio.',
+  };
+
+  function renderSourceRadios() {
+    sourceRadios.innerHTML = '';
+    INPUT_SOURCES.forEach((src) => {
+      const label = document.createElement('label');
+      label.className = 'model-radio';
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'inputSource';
+      radio.value = src.id;
+      radio.checked = src.id === 'usb';
+      radio.addEventListener('change', updateSourceHint);
+      label.appendChild(radio);
+      label.appendChild(document.createTextNode(src.label));
+      sourceRadios.appendChild(label);
+    });
+    updateSourceHint();
+  }
+
+  function updateSourceHint() {
+    sourceHint.textContent = SOURCE_HINTS[getInputSource()] || '';
+  }
+
+  function getInputSource() {
+    const checked = sourceRadios.querySelector('input[type="radio"]:checked');
+    return checked ? checked.value : 'usb';
+  }
+
+  function disableInputSourceRadios(disabled) {
+    const radios = sourceRadios.querySelectorAll('input[type="radio"]');
+    radios.forEach((r) => { r.disabled = disabled; });
   }
 
   voiceCloneCheckbox.addEventListener('change', () => {
@@ -330,7 +379,7 @@
       await authFetch('/api/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ languages, provider, voiceConfig: getVoiceConfig() }),
+        body: JSON.stringify({ languages, provider, voiceConfig: getVoiceConfig(), inputSource: getInputSource() }),
       });
 
       setStatus('Translating', true);
@@ -341,6 +390,7 @@
       disableLanguageCheckboxes(true);
       disableModelRadios(true);
       disableVoiceControls(true);
+      disableInputSourceRadios(true);
     } catch (err) {
       alert('Failed to start: ' + err.message);
       startBtn.disabled = false;
@@ -371,6 +421,7 @@
     disableLanguageCheckboxes(false);
     disableModelRadios(false);
     disableVoiceControls(false);
+    disableInputSourceRadios(false);
   });
 
   printQrBtn.addEventListener('click', () => {

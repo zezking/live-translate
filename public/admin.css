@@ -336,3 +336,32 @@ body {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+.source-radios {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.source-hint {
+  font-size: 12px;
+  color: #888;
+  font-style: italic;
+  margin: 4px 0 12px;
+  min-height: 16px;
+}
+
+.btn-reconnect {
+  padding: 8px 16px;
+  font-size: 12px;
+  letter-spacing: 1px;
+  margin-top: 12px;
+  background: #5d2a2a;
+  color: #ffcccc;
+  border: 1px solid #ff6b6b;
+}
+
+.btn-reconnect:hover {
+  background: #ff6b6b;
+  color: #000;
+}
