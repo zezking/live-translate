@@ -498,10 +498,17 @@
     startBtn.textContent = 'STARTING...';
 
     try {
+      await authFetch('/api/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ languages, provider, voiceConfig: getVoiceConfig(), inputSource }),
+      });
+
       if (inputSource === 'browser' || inputSource === 'system') {
         try {
           await setupBrowserCapture(inputSource);
         } catch (err) {
+          await authFetch('/api/stop', { method: 'POST' });
           teardownBrowserCapture();
           startBtn.disabled = false;
           startBtn.textContent = 'START';
@@ -509,12 +516,6 @@
           return;
         }
       }
-
-      await authFetch('/api/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ languages, provider, voiceConfig: getVoiceConfig(), inputSource }),
-      });
 
       setStatus('Translating', true);
       startBtn.classList.add('hidden');
