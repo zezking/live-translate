@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import { UsbAudioSource } from './usb-audio-source.js';
+import { BrowserAudioSource } from './browser-audio-source.js';
 import { SessionManager } from './session-manager.js';
 import { QwenTranslationSession } from './qwen-translation-session.js';
 import { AudioBroadcaster } from './audio-broadcaster.js';
@@ -21,7 +22,19 @@ const apiKeys = {
   qwen: process.env.DASHSCOPE_API_KEY,
 };
 
-const audioCapture = new UsbAudioSource();
+let activeSource = null;
+let activeInputSource = null;
+
+function createSource(inputSource) {
+  if (inputSource === 'usb' || !inputSource) return new UsbAudioSource();
+  if (inputSource === 'browser' || inputSource === 'system') {
+    return new BrowserAudioSource(server, ADMIN_PASSWORD);
+  }
+  return null;
+}
+
+activeSource = createSource('usb');
+activeSource.on('chunk', (chunk) => sessionManager.sendAudio(chunk));
 const sessionManager = new SessionManager();
 const broadcaster = new AudioBroadcaster(server);
 
@@ -75,10 +88,6 @@ app.get('/interpreter', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'interpreter.html'));
 });
 
-audioCapture.on('chunk', (chunk) => {
-  sessionManager.sendAudio(chunk);
-});
-
 sessionManager.on('audio', ({ languageCode, buffer }) => {
   broadcaster.broadcastAudio(languageCode, buffer);
 });
@@ -108,6 +117,7 @@ app.get('/api/status', async (req, res) => {
     estimatedCost: tier === 'free' ? 0 : stats.estimatedCost,
     attendees: broadcaster.getClientCount(),
     attendeesByLanguage: broadcaster.getClientsByLanguage(),
+    inputSource: stats.isRunning ? activeInputSource : null,
   });
 });
 
@@ -149,19 +159,38 @@ app.get('/api/qrcode', requireAdmin, async (req, res) => {
 
 app.post('/api/start', requireAdmin, async (req, res) => {
   try {
-    const { languages, provider, voiceConfig } = req.body || {};
+    const { languages, provider, voiceConfig, inputSource } = req.body || {};
+    if (inputSource && !['usb', 'browser', 'system'].includes(inputSource)) {
+      return res.status(400).json({ error: `Invalid inputSource: ${inputSource}` });
+    }
+    const effectiveSource = inputSource || 'usb';
+
+    const newSource = createSource(effectiveSource);
+    if (!newSource) {
+      return res.status(400).json({ error: `Invalid inputSource: ${effectiveSource}` });
+    }
+
+    if (activeSource) {
+      activeSource.removeAllListeners('chunk');
+      activeSource.stop();
+    }
+
+    activeSource = newSource;
+    activeInputSource = effectiveSource;
+    activeSource.on('chunk', (chunk) => sessionManager.sendAudio(chunk));
+
     if (languages) {
       sessionManager.setEnabledLanguages(languages);
     }
     const selectedProvider = provider || (apiKeys.gemini ? 'gemini' : 'qwen');
-    audioCapture.start();
+    activeSource.start();
     try {
       await sessionManager.start(apiKeys, selectedProvider, voiceConfig || {});
     } catch (err) {
-      audioCapture.stop();
+      activeSource.stop();
       throw err;
     }
-    res.json({ status: 'started', provider: selectedProvider });
+    res.json({ status: 'started', provider: selectedProvider, inputSource: effectiveSource });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -169,21 +198,24 @@ app.post('/api/start', requireAdmin, async (req, res) => {
 
 app.post('/api/pause', requireAdmin, (req, res) => {
   sessionManager.pause();
-  audioCapture.pause();
+  activeSource.pause();
   broadcaster.broadcastStatus({ state: 'paused' });
   res.json({ status: 'paused' });
 });
 
 app.post('/api/resume', requireAdmin, (req, res) => {
   sessionManager.resume();
-  audioCapture.resume();
+  activeSource.resume();
   broadcaster.broadcastStatus({ state: 'translating' });
   res.json({ status: 'resumed' });
 });
 
 app.post('/api/stop', requireAdmin, async (req, res) => {
   try {
-    audioCapture.stop();
+    activeSource.stop();
+    activeSource = createSource('usb');
+    activeSource.on('chunk', (chunk) => sessionManager.sendAudio(chunk));
+    activeInputSource = null;
     await sessionManager.stop();
     broadcaster.broadcastStatus({ state: 'stopped' });
     res.json({ status: 'stopped' });
@@ -208,9 +240,9 @@ app.get('/api/audio-level', requireAdmin, (req, res) => {
     res.write(`data: ${JSON.stringify({ db, rms })}\n\n`);
   };
 
-  audioCapture.on('chunk', handler);
+  activeSource.on('chunk', handler);
   req.on('close', () => {
-    audioCapture.removeListener('chunk', handler);
+    activeSource.removeListener('chunk', handler);
   });
 });
 
