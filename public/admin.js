@@ -125,7 +125,20 @@
       startBtn.classList.add('hidden');
       activeControls.classList.remove('hidden');
       if (data.isPaused) pauseBtn.textContent = 'RESUME';
-      startAudioLevel();
+
+      // restore the source radio to match the running session
+      if (data.inputSource) {
+        const radios = sourceRadios.querySelectorAll('input[type="radio"]');
+        radios.forEach((r) => { r.checked = r.value === data.inputSource; });
+        updateSourceHint();
+      }
+
+      // browser/system sources lost their WS on reload — show RECONNECT
+      if (data.inputSource === 'browser' || data.inputSource === 'system') {
+        reconnectBtn.classList.remove('hidden');
+      } else {
+        startAudioLevel();
+      }
       startPolling();
       disableLanguageCheckboxes(true);
       disableModelRadios(true);
@@ -551,6 +564,25 @@
   stopBtn.addEventListener('click', async () => {
     await authFetch('/api/stop', { method: 'POST' });
     handleSessionStopped();
+  });
+
+  reconnectBtn.addEventListener('click', async () => {
+    if (browserCapture) return;
+    reconnectBtn.disabled = true;
+    reconnectBtn.textContent = 'CONNECTING...';
+    try {
+      const inputSource = getInputSource();
+      await setupBrowserCapture(inputSource);
+      setStatus('Translating', true);
+      reconnectBtn.classList.add('hidden');
+      reconnectBtn.disabled = false;
+      reconnectBtn.textContent = 'RECONNECT AUDIO';
+    } catch (err) {
+      teardownBrowserCapture();
+      reconnectBtn.disabled = false;
+      reconnectBtn.textContent = 'RECONNECT AUDIO';
+      if (err && err.name !== 'NotAllowedError') alert(err.message || 'Reconnect failed');
+    }
   });
 
   printQrBtn.addEventListener('click', () => {
