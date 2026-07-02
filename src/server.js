@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import { UsbAudioSource } from './usb-audio-source.js';
-import { BrowserAudioSource } from './browser-audio-source.js';
+import { BrowserAudioSource, WS_ADMIN_INPUT_PATH } from './browser-audio-source.js';
 import { SessionManager } from './session-manager.js';
 import { QwenTranslationSession } from './qwen-translation-session.js';
 import { AudioBroadcaster } from './audio-broadcaster.js';
@@ -29,7 +29,22 @@ const sessionManager = new SessionManager();
 const broadcaster = new AudioBroadcaster(server);
 const browserAudioSource = new BrowserAudioSource(server, ADMIN_PASSWORD);
 browserAudioSource.start();
-console.log('[browser-audio-source] WSS attached on /ws/admin-input');
+console.log('[browser-audio-source] WSS attached (noServer mode)');
+
+// Route upgrade events manually — ws v8 aborts non-matching paths, which
+// destroys the socket before other WSS instances can handle it.
+const existingUpgradeListeners = server.listeners('upgrade').slice();
+server.removeAllListeners('upgrade');
+server.on('upgrade', (req, socket, head) => {
+  const pathname = new URL(req.url, 'http://localhost').pathname;
+  if (pathname === WS_ADMIN_INPUT_PATH) {
+    browserAudioSource.handleUpgrade(req, socket, head);
+  } else {
+    for (const listener of existingUpgradeListeners) {
+      listener.call(server, req, socket, head);
+    }
+  }
+});
 
 function createSource(inputSource) {
   if (inputSource === 'usb' || !inputSource) return new UsbAudioSource();

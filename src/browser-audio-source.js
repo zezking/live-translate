@@ -3,6 +3,8 @@ import { EventEmitter } from 'events';
 
 const WS_PATH = '/ws/admin-input';
 
+export { WS_PATH as WS_ADMIN_INPUT_PATH };
+
 export class BrowserAudioSource extends EventEmitter {
   constructor(server, adminPassword) {
     super();
@@ -15,7 +17,7 @@ export class BrowserAudioSource extends EventEmitter {
 
   start() {
     if (this._wss) return;
-    this._wss = new WebSocketServer({ server: this._server, path: WS_PATH });
+    this._wss = new WebSocketServer({ noServer: true });
 
     this._wss.on('connection', (ws, req) => {
       console.log('[browser-audio-source] WS connection attempt from', req.socket.remoteAddress, 'url:', req.url);
@@ -51,6 +53,12 @@ export class BrowserAudioSource extends EventEmitter {
   _authorize(req) {
     const url = new URL(req.url, 'http://localhost');
     return url.searchParams.get('key') === this._adminPassword;
+  }
+
+  handleUpgrade(req, socket, head) {
+    this._wss.handleUpgrade(req, socket, head, (ws) => {
+      this._wss.emit('connection', ws, req);
+    });
   }
 
   pause() {

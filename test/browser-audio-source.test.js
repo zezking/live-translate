@@ -10,6 +10,9 @@ function setup() {
   const httpServer = createServer();
   const source = new BrowserAudioSource(httpServer, PASSWORD);
   source.start();
+  httpServer.on('upgrade', (req, socket, head) => {
+    source.handleUpgrade(req, socket, head);
+  });
   return new Promise((resolve) => {
     httpServer.listen(0, '127.0.0.1', () => {
       const port = httpServer.address().port;
