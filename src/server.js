@@ -4,7 +4,7 @@ import { createServer } from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
-import { AudioCapture } from './audio-capture.js';
+import { UsbAudioSource } from './usb-audio-source.js';
 import { SessionManager } from './session-manager.js';
 import { QwenTranslationSession } from './qwen-translation-session.js';
 import { AudioBroadcaster } from './audio-broadcaster.js';
@@ -21,7 +21,7 @@ const apiKeys = {
   qwen: process.env.DASHSCOPE_API_KEY,
 };
 
-const audioCapture = new AudioCapture();
+const audioCapture = new UsbAudioSource();
 const sessionManager = new SessionManager();
 const broadcaster = new AudioBroadcaster(server);
 
