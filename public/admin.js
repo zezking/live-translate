@@ -372,47 +372,55 @@
       throw new Error(msg);
     }
 
-    const audioContext = new AudioContext({ sampleRate: 16000 });
-    await audioContext.audioWorklet.addModule('/pcm-worklet.js');
+    let audioContext = null;
+    try {
+      audioContext = new AudioContext({ sampleRate: 16000 });
+      await audioContext.audioWorklet.addModule('/pcm-worklet.js');
 
-    const sourceNode = audioContext.createMediaStreamSource(stream);
-    const workletNode = new AudioWorkletNode(audioContext, 'pcm-capture', {
-      channelCount: 1,
-      channelCountMode: 'explicit',
-    });
-    sourceNode.connect(workletNode);
+      const sourceNode = audioContext.createMediaStreamSource(stream);
+      const workletNode = new AudioWorkletNode(audioContext, 'pcm-capture', {
+        channelCount: 1,
+        channelCountMode: 'explicit',
+      });
+      sourceNode.connect(workletNode);
 
-    const analyser = audioContext.createAnalyser();
-    analyser.fftSize = 1024;
-    sourceNode.connect(analyser);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 1024;
+      sourceNode.connect(analyser);
 
-    const ws = new WebSocket('/ws/admin-input?key=' + encodeURIComponent(adminKey));
-    ws.binaryType = 'arraybuffer';
+      const wsProto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+      const ws = new WebSocket(wsProto + location.host + '/ws/admin-input?key=' + encodeURIComponent(adminKey));
+      ws.binaryType = 'arraybuffer';
 
-    await new Promise((resolve, reject) => {
-      ws.addEventListener('open', () => resolve(), { once: true });
-      ws.addEventListener('error', () => reject(new Error('Audio upload socket failed to open')), { once: true });
-    });
+      await new Promise((resolve, reject) => {
+        ws.addEventListener('open', () => resolve(), { once: true });
+        ws.addEventListener('error', () => reject(new Error('Audio upload socket failed to open')), { once: true });
+      });
 
-    workletNode.port.onmessage = (e) => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(e.data);
-    };
+      workletNode.port.onmessage = (e) => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(e.data);
+      };
 
-    ws.addEventListener('close', () => {
-      if (!browserCapture) return;
-      statusEl.innerHTML = '<span class="status-dot" style="background:#ff6b6b"></span>Audio disconnected';
-      reconnectBtn.classList.remove('hidden');
-      stopBrowserAudioLevel();
-    });
+      ws.addEventListener('close', () => {
+        if (!browserCapture) return;
+        statusEl.innerHTML = '<span class="status-dot" style="background:#ff6b6b"></span>Audio disconnected';
+        reconnectBtn.classList.remove('hidden');
+        stopBrowserAudioLevel();
+      });
 
-    stream.getAudioTracks()[0].addEventListener('ended', async () => {
-      if (!browserCapture) return;
-      await authFetch('/api/stop', { method: 'POST' });
-      handleSessionStopped();
-    });
+      stream.getAudioTracks()[0].addEventListener('ended', async () => {
+        if (!browserCapture) return;
+        await authFetch('/api/stop', { method: 'POST' });
+        handleSessionStopped();
+      });
 
-    browserCapture = { stream, audioContext, sourceNode, workletNode, analyser, ws, analyserInterval: null };
-    startBrowserAudioLevel(analyser);
+      browserCapture = { stream, audioContext, sourceNode, workletNode, analyser, ws, analyserInterval: null };
+      startBrowserAudioLevel(analyser);
+    } catch (err) {
+      if (audioContext) { try { audioContext.close(); } catch {} }
+      stream.getTracks().forEach((t) => t.stop());
+      throw err;
+    }
   }
 
   function teardownBrowserCapture() {
