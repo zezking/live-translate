@@ -20,18 +20,14 @@ export class BrowserAudioSource extends EventEmitter {
     this._wss = new WebSocketServer({ noServer: true });
 
     this._wss.on('connection', (ws, req) => {
-      console.log('[browser-audio-source] WS connection attempt from', req.socket.remoteAddress, 'url:', req.url);
       if (!this._authorize(req)) {
-        console.log('[browser-audio-source] rejected: unauthorized');
         ws.close(1008, 'unauthorized');
         return;
       }
       if (this._activeWs && this._activeWs.readyState === 1) {
-        console.log('[browser-audio-source] rejected: another connection is active');
         ws.close(1008, 'another connection is active');
         return;
       }
-      console.log('[browser-audio-source] WS accepted');
       this._activeWs = ws;
 
       ws.on('message', (data, isBinary) => {

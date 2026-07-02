@@ -29,7 +29,6 @@ const sessionManager = new SessionManager();
 const broadcaster = new AudioBroadcaster(server);
 const browserAudioSource = new BrowserAudioSource(server, ADMIN_PASSWORD);
 browserAudioSource.start();
-console.log('[browser-audio-source] WSS attached (noServer mode)');
 
 // Route upgrade events manually — ws v8 aborts non-matching paths, which
 // destroys the socket before other WSS instances can handle it.
