@@ -1,19 +1,19 @@
-# Centre Church Live Translation
+# Live Sermon Translation
 
-AI-powered real-time sermon translation for Centre Church. Replaces the human interpreter + ListenWiFi setup with an automated system that streams translated audio to attendees' phones via a web browser — no app install required.
+AI-powered real-time translation for live events, worship services, and meetings. Streams translated audio to attendees' phones via a web browser — no app install required.
 
 ## Hardware Setup
 
 ```
-Booth Console (Model 204) → 1/4" TRS → RCA cable → UCA222 USB → MacBook Pro
+Audio Source → 1/4" TRS → RCA cable → UCA222 USB → Laptop
 ```
 
 | Component | Purpose |
 |-----------|---------|
-| Studio Technologies Model 204 | Announcer's console in the translation booth |
-| 1/4" TRS to dual RCA cable (male to male) | Carries audio from Model 204 headphone out to UCA222 |
+| Audio console / mixer | Source audio feed (booth output, line level) |
+| 1/4" TRS to dual RCA cable (male to male) | Carries audio from console headphone out to UCA222 |
 | Behringer UCA222 | USB audio interface — RCA inputs → USB output |
-| MacBook Pro | Runs the translation server and streams to attendees |
+| Laptop (macOS) | Runs the translation server and streams to attendees |
 
 The Mac captures audio via the UCA222's USB connection. On macOS the device appears as `USB Audio CODEC` (set as the system default input). For forced device selection, set `AUDIO_DEVICE` in `.env`.
 
@@ -23,11 +23,11 @@ The admin panel can capture audio from three sources (selectable on the admin pa
 
 | Source | What it captures | Platform |
 |--------|------------------|----------|
-| **USB** (default) | The UCA222 / USB interface via `sox` + CoreAudio — the production booth setup | macOS only |
-| **Browser** | Audio playing in a browser tab (e.g. a YouTube sermon). The admin clicks START, then picks a Chrome Tab in the picker and ticks "Share tab audio" | Any OS, Chrome/Edge |
-| **System** | Full macOS audio loopback — any app's output. The admin clicks START, then picks Entire Screen and ticks "Share system audio" | Chrome/Edge on macOS |
+| **USB** (default) | The UCA222 / USB interface via `sox` + CoreAudio — the production setup | macOS only |
+| **Browser** | Audio playing in a browser tab (e.g. a YouTube video). The admin clicks START, then picks a Chrome Tab in the picker and ticks "Share tab audio" | Any OS, Chrome/Edge |
+| **System** | Full system audio loopback — any app's output. The admin clicks START, then picks Entire Screen and ticks "Share system audio" | Chrome/Edge on macOS |
 
-USB is the production source. Browser and System are intended for quick testing with pre-recorded content and for demos without the booth hardware.
+USB is the production source. Browser and System are intended for quick testing with pre-recorded content and for demos without the hardware setup.
 
 **Browser support for Browser/System modes:**
 - Chrome / Edge: fully supported
@@ -87,7 +87,7 @@ Edit `.env` with your API keys:
 GEMINI_API_KEY=your-gemini-key
 DASHSCOPE_API_KEY=your-dashscope-key   # optional
 PORT=3000
-ADMIN_PASSWORD=centrechurch
+ADMIN_PASSWORD=your-password
 # AUDIO_DEVICE=USB Audio CODEC        # optional — force a specific input device
 ```
 
@@ -96,6 +96,7 @@ ADMIN_PASSWORD=centrechurch
 ```bash
 npm start        # production
 npm run dev      # development (auto-restart)
+npm test         # run unit tests
 ```
 
 The server prints three URLs on startup:
@@ -111,17 +112,17 @@ To listen to the USB input through your Mac's speakers (for troubleshooting):
 sox --default-device --rate 16000 --channels 1 -t coreaudio "MacBook Pro Speakers"
 ```
 
-## Usage (Sunday Service)
+## Usage (Live Event)
 
-1. Connect 1/4" TRS cable from Model 204 headphone out → dual RCA → UCA222 → USB → Mac
+1. Connect audio cable from console headphone out → dual RCA → UCA222 → USB → Mac
 2. Run `npm start`
 3. Open admin panel, log in with the configured password
 4. Select provider (Gemini or Qwen) and target languages
-4b. Pick the audio input source (USB / Browser / System) — defaults to USB for live services
-5. Click **START** when the sermon begins
-6. Display the QR code on a screen or print handouts — attendees scan and pick their language
-7. Click **PAUSE** during worship/music, **RESUME** for the sermon
-8. Click **STOP** when the service ends
+5. Pick the audio input source (USB / Browser / System) — defaults to USB for live events
+6. Click **START** when the event begins
+7. Display the QR code on a screen or print handouts — attendees scan and pick their language
+8. Click **PAUSE** during breaks/music, **RESUME** to continue
+9. Click **STOP** when the event ends
 
 The admin session persists across page reloads — if you refresh, the running session is restored automatically.
 
@@ -165,33 +166,23 @@ public/
 
 ## Hotwords
 
-`src/hotwords.json` contains religious terminology translations keyed by target language. When using Qwen, these are sent as a translation corpus to improve accuracy of church-specific terms. Edit this file to add or refine translations.
+`src/hotwords.json` contains religious terminology translations keyed by target language. When using Qwen, these are sent as a translation corpus to improve accuracy of specific terms. Edit this file to add or refine translations.
 
 ## Before Production
 
 - [ ] Hardcoded admin password in `.env` — consider a stronger password or env-only config
 - [ ] No HTTPS — attendees on public WiFi may see browser warnings for plain `http://`
-- [ ] No authentication on attendee/interpreter pages — fine for church, but worth noting
+- [ ] No authentication on attendee/interpreter pages — fine for internal use, but worth noting
 - [ ] Gemini sessions expire after 15-30 min — auto-reconnect works but causes a brief gap
 - [ ] Qwen `connections too much` error on free tier — may need rate-limit handling
 - [ ] No graceful degradation if one language fails — others continue, but admin sees errors
 - [ ] Audio capture uses sox — no fallback on macOS if sox is missing or fails
-- [ ] No persistent logs or metrics — useful for debugging service-day issues
-- [ ] **Church public WiFi has client isolation** — mobile devices cannot reach the server IP despite sufficient internet speed. Requires a separate local network for attendee devices
-- [ ] **Church secured WiFi too slow** — significant translation latency on "Centre Church Translation" secured network. Public WiFi is faster but not reachable from attendee devices
-
-## Network
-
-The church has two WiFi networks:
-
-- **Centre Church Public** — open, fast enough for translation, but has client isolation (devices cannot reach each other)
-- **Centre Church Translation** — secured, but internet speed is too slow for real-time translation
-
-Neither network currently satisfies both requirements (internet speed for API calls + local connectivity for attendee devices). This is documented in Before Production above.
+- [ ] No persistent logs or metrics — useful for debugging day-of issues
+- [ ] **Venue WiFi may have client isolation** — mobile devices may not reach the server IP even with internet access. Requires a dedicated local network for attendee devices
 
 ## Cost
 
-~$8.80 per 60-min service (4 languages, Gemini paid tier). Free tier available for testing.
+~$8.80 per 60-min event (4 languages, Gemini paid tier). Free tier available for testing.
 
 | Component | Rate |
 |-----------|------|
