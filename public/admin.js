@@ -22,11 +22,15 @@
   const voiceCloneCheckbox = document.getElementById('voice-clone-checkbox');
   const voiceSelectGroup = document.getElementById('voice-select-group');
   const voiceSelect = document.getElementById('voice-select');
+  const sourceRadios = document.getElementById('source-radios');
+  const sourceHint = document.getElementById('source-hint');
+  const reconnectBtn = document.getElementById('reconnect-btn');
 
   let levelEventSource = null;
   let pollInterval = null;
   let isFreeTier = false;
   let adminKey = sessionStorage.getItem('adminKey') || '';
+  let browserCapture = null;
 
   const meterFill = document.createElement('div');
   meterFill.className = 'level-meter-fill';
@@ -85,6 +89,7 @@
   }
 
   async function init() {
+    renderSourceRadios();
     await loadProviders();
     await loadLanguages();
     loadVoices();
@@ -120,11 +125,25 @@
       startBtn.classList.add('hidden');
       activeControls.classList.remove('hidden');
       if (data.isPaused) pauseBtn.textContent = 'RESUME';
-      startAudioLevel();
+
+      // restore the source radio to match the running session
+      if (data.inputSource) {
+        const radios = sourceRadios.querySelectorAll('input[type="radio"]');
+        radios.forEach((r) => { r.checked = r.value === data.inputSource; });
+        updateSourceHint();
+      }
+
+      // browser/system sources lost their WS on reload — show RECONNECT
+      if (data.inputSource === 'browser' || data.inputSource === 'system') {
+        reconnectBtn.classList.remove('hidden');
+      } else {
+        startAudioLevel();
+      }
       startPolling();
       disableLanguageCheckboxes(true);
       disableModelRadios(true);
       disableVoiceControls(true);
+      disableInputSourceRadios(true);
     } catch (e) {
       // session not running or auth failed — nothing to restore
     }
@@ -178,6 +197,50 @@
     } else {
       voiceSection.style.display = 'none';
     }
+  }
+
+  const INPUT_SOURCES = [
+    { id: 'usb', label: 'USB' },
+    { id: 'browser', label: 'Browser' },
+    { id: 'system', label: 'System' },
+  ];
+
+  const SOURCE_HINTS = {
+    usb: 'Captures from the USB device via sox.',
+    browser: 'Click START, then in the picker choose a Chrome Tab and tick Share tab audio.',
+    system: 'Click START, then in the picker choose Entire Screen and tick Share system audio.',
+  };
+
+  function renderSourceRadios() {
+    sourceRadios.innerHTML = '';
+    INPUT_SOURCES.forEach((src) => {
+      const label = document.createElement('label');
+      label.className = 'model-radio';
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'inputSource';
+      radio.value = src.id;
+      radio.checked = src.id === 'usb';
+      radio.addEventListener('change', updateSourceHint);
+      label.appendChild(radio);
+      label.appendChild(document.createTextNode(src.label));
+      sourceRadios.appendChild(label);
+    });
+    updateSourceHint();
+  }
+
+  function updateSourceHint() {
+    sourceHint.textContent = SOURCE_HINTS[getInputSource()] || '';
+  }
+
+  function getInputSource() {
+    const checked = sourceRadios.querySelector('input[type="radio"]:checked');
+    return checked ? checked.value : 'usb';
+  }
+
+  function disableInputSourceRadios(disabled) {
+    const radios = sourceRadios.querySelectorAll('input[type="radio"]');
+    radios.forEach((r) => { r.disabled = disabled; });
   }
 
   voiceCloneCheckbox.addEventListener('change', () => {
@@ -290,6 +353,121 @@
     levelDb.textContent = '-- dB';
   }
 
+  async function setupBrowserCapture(inputSource) {
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      },
+      systemAudio: 'include',
+    });
+
+    if (stream.getAudioTracks().length === 0) {
+      stream.getTracks().forEach((t) => t.stop());
+      const msg = inputSource === 'system'
+        ? 'No audio shared. In the picker, choose "Entire Screen" and tick "Share system audio".'
+        : 'No audio shared. In the picker, choose a "Chrome Tab" and tick "Share tab audio".';
+      throw new Error(msg);
+    }
+
+    let audioContext = null;
+    try {
+      audioContext = new AudioContext({ sampleRate: 16000 });
+      await audioContext.audioWorklet.addModule('/pcm-worklet.js');
+
+      const sourceNode = audioContext.createMediaStreamSource(stream);
+      const workletNode = new AudioWorkletNode(audioContext, 'pcm-capture', {
+        channelCount: 1,
+        channelCountMode: 'explicit',
+      });
+      sourceNode.connect(workletNode);
+
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 1024;
+      sourceNode.connect(analyser);
+
+      const wsProto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+      const ws = new WebSocket(wsProto + location.host + '/ws/admin-input?key=' + encodeURIComponent(adminKey));
+      ws.binaryType = 'arraybuffer';
+
+      await new Promise((resolve, reject) => {
+        ws.addEventListener('open', () => resolve(), { once: true });
+        ws.addEventListener('error', () => reject(new Error('Audio upload socket failed to open')), { once: true });
+      });
+
+      workletNode.port.onmessage = (e) => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(e.data);
+      };
+
+      ws.addEventListener('close', () => {
+        if (!browserCapture) return;
+        statusEl.innerHTML = '<span class="status-dot" style="background:#ff6b6b"></span>Audio disconnected';
+        reconnectBtn.classList.remove('hidden');
+        stopBrowserAudioLevel();
+      });
+
+      stream.getAudioTracks()[0].addEventListener('ended', async () => {
+        if (!browserCapture) return;
+        await authFetch('/api/stop', { method: 'POST' });
+        handleSessionStopped();
+      });
+
+      browserCapture = { stream, audioContext, sourceNode, workletNode, analyser, ws, analyserInterval: null };
+      startBrowserAudioLevel(analyser);
+    } catch (err) {
+      if (audioContext) { try { audioContext.close(); } catch {} }
+      stream.getTracks().forEach((t) => t.stop());
+      throw err;
+    }
+  }
+
+  function teardownBrowserCapture() {
+    if (!browserCapture) return;
+    const cap = browserCapture;
+    browserCapture = null;
+    if (cap.analyserInterval) clearInterval(cap.analyserInterval);
+    if (cap.ws) {
+      try {
+        cap.ws.onmessage = null;
+        cap.ws.onclose = null;
+        cap.ws.onerror = null;
+        cap.ws.close();
+      } catch {}
+    }
+    if (cap.stream) cap.stream.getTracks().forEach((t) => t.stop());
+    if (cap.audioContext) {
+      try { cap.audioContext.close(); } catch {}
+    }
+  }
+
+  function startBrowserAudioLevel(analyser) {
+    const buf = new Uint8Array(analyser.fftSize);
+    browserCapture.analyserInterval = setInterval(() => {
+      analyser.getByteTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) {
+        const v = (buf[i] - 128) / 128;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / buf.length);
+      const db = 20 * Math.log10(Math.max(rms, 1e-10));
+      const pct = Math.max(0, Math.min(100, ((db + 60) / 60) * 100));
+      meterFill.style.width = pct + '%';
+      levelDb.textContent = db.toFixed(0) + ' dB';
+    }, 100);
+  }
+
+  function stopBrowserAudioLevel() {
+    if (browserCapture && browserCapture.analyserInterval) {
+      clearInterval(browserCapture.analyserInterval);
+      browserCapture.analyserInterval = null;
+    }
+    meterFill.style.width = '0%';
+    levelDb.textContent = '-- dB';
+  }
+
   function getSelectedProvider() {
     const checked = modelRadios.querySelector('input[type="radio"]:checked');
     return checked ? checked.value : null;
@@ -323,6 +501,7 @@
       alert('No translation model available. Check API keys.');
       return;
     }
+    const inputSource = getInputSource();
     startBtn.disabled = true;
     startBtn.textContent = 'STARTING...';
 
@@ -330,18 +509,33 @@
       await authFetch('/api/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ languages, provider, voiceConfig: getVoiceConfig() }),
+        body: JSON.stringify({ languages, provider, voiceConfig: getVoiceConfig(), inputSource }),
       });
+
+      if (inputSource === 'browser' || inputSource === 'system') {
+        try {
+          await setupBrowserCapture(inputSource);
+        } catch (err) {
+          await authFetch('/api/stop', { method: 'POST' });
+          teardownBrowserCapture();
+          startBtn.disabled = false;
+          startBtn.textContent = 'START';
+          if (err && err.name !== 'NotAllowedError') alert(err.message || 'Audio capture failed');
+          return;
+        }
+      }
 
       setStatus('Translating', true);
       startBtn.classList.add('hidden');
       activeControls.classList.remove('hidden');
-      startAudioLevel();
+      if (inputSource === 'usb') startAudioLevel();
       startPolling();
       disableLanguageCheckboxes(true);
       disableModelRadios(true);
       disableVoiceControls(true);
+      disableInputSourceRadios(true);
     } catch (err) {
+      teardownBrowserCapture();
       alert('Failed to start: ' + err.message);
       startBtn.disabled = false;
       startBtn.textContent = 'START';
@@ -356,21 +550,48 @@
     setStatus(isPaused ? 'Translating' : 'Paused', isPaused);
   });
 
-  stopBtn.addEventListener('click', async () => {
-    await authFetch('/api/stop', { method: 'POST' });
+  function handleSessionStopped() {
     setStatus('Ready', false);
     activeControls.classList.add('hidden');
     startBtn.classList.remove('hidden');
     startBtn.disabled = false;
     startBtn.textContent = 'START';
+    teardownBrowserCapture();
     stopAudioLevel();
+    stopBrowserAudioLevel();
+    reconnectBtn.classList.add('hidden');
     stopPolling();
     statAttendees.textContent = '0';
     statTimer.textContent = '00:00:00';
-    statCost.textContent = '$0.00';
+    statCost.textContent = isFreeTier ? 'Free' : '$0.00';
     disableLanguageCheckboxes(false);
     disableModelRadios(false);
     disableVoiceControls(false);
+    disableInputSourceRadios(false);
+  }
+
+  stopBtn.addEventListener('click', async () => {
+    await authFetch('/api/stop', { method: 'POST' });
+    handleSessionStopped();
+  });
+
+  reconnectBtn.addEventListener('click', async () => {
+    if (browserCapture) return;
+    reconnectBtn.disabled = true;
+    reconnectBtn.textContent = 'CONNECTING...';
+    try {
+      const inputSource = getInputSource();
+      await setupBrowserCapture(inputSource);
+      setStatus('Translating', true);
+      reconnectBtn.classList.add('hidden');
+      reconnectBtn.disabled = false;
+      reconnectBtn.textContent = 'RECONNECT AUDIO';
+    } catch (err) {
+      teardownBrowserCapture();
+      reconnectBtn.disabled = false;
+      reconnectBtn.textContent = 'RECONNECT AUDIO';
+      if (err && err.name !== 'NotAllowedError') alert(err.message || 'Reconnect failed');
+    }
   });
 
   printQrBtn.addEventListener('click', () => {

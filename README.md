@@ -17,6 +17,23 @@ Booth Console (Model 204) → 1/4" TRS → RCA cable → UCA222 USB → MacBook 
 
 The Mac captures audio via the UCA222's USB connection. On macOS the device appears as `USB Audio CODEC` (set as the system default input). For forced device selection, set `AUDIO_DEVICE` in `.env`.
 
+## Audio Input Sources
+
+The admin panel can capture audio from three sources (selectable on the admin page):
+
+| Source | What it captures | Platform |
+|--------|------------------|----------|
+| **USB** (default) | The UCA222 / USB interface via `sox` + CoreAudio — the production booth setup | macOS only |
+| **Browser** | Audio playing in a browser tab (e.g. a YouTube sermon). The admin clicks START, then picks a Chrome Tab in the picker and ticks "Share tab audio" | Any OS, Chrome/Edge |
+| **System** | Full macOS audio loopback — any app's output. The admin clicks START, then picks Entire Screen and ticks "Share system audio" | Chrome/Edge on macOS |
+
+USB is the production source. Browser and System are intended for quick testing with pre-recorded content and for demos without the booth hardware.
+
+**Browser support for Browser/System modes:**
+- Chrome / Edge: fully supported
+- Firefox: tab audio works; system audio not supported
+- Safari: not supported in v1
+
 ## Supported Languages
 
 | Code | Label |
@@ -50,7 +67,7 @@ Each language opens a separate session. Gemini sessions expire after ~15-30 minu
 - sox (`brew install sox`)
 - Google AI API key ([Get one](https://aistudio.google.com/apikey))
 - Alibaba DashScope API key (optional, for Qwen provider)
-- macOS (for CoreAudio capture)
+- macOS (required for USB source; Browser/System sources work on any OS)
 
 ### Install
 
@@ -100,6 +117,7 @@ sox --default-device --rate 16000 --channels 1 -t coreaudio "MacBook Pro Speaker
 2. Run `npm start`
 3. Open admin panel, log in with the configured password
 4. Select provider (Gemini or Qwen) and target languages
+4b. Pick the audio input source (USB / Browser / System) — defaults to USB for live services
 5. Click **START** when the sermon begins
 6. Display the QR code on a screen or print handouts — attendees scan and pick their language
 7. Click **PAUSE** during worship/music, **RESUME** for the sermon
@@ -112,7 +130,8 @@ The admin session persists across page reloads — if you refresh, the running s
 ```
 src/
 ├── server.js                     # Express server, API routes
-├── audio-capture.js              # macOS CoreAudio → 100ms PCM chunks
+├── usb-audio-source.js           # USB/CoreAudio → 100ms PCM chunks
+├── browser-audio-source.js       # WebSocket receiver for browser-captured audio
 ├── gemini-translation-session.js # Gemini Live Translate session
 ├── qwen-translation-session.js   # Qwen Live Translate session (WebSocket)
 ├── session-manager.js            # Coordinates parallel translation streams
@@ -122,6 +141,7 @@ src/
 public/
 ├── attendee.html/css/js          # Attendee page (language selection, audio)
 ├── admin.html/css/js             # Admin panel (dark theme, operator controls)
+├── pcm-worklet.js                # AudioWorklet processor (Float32 → Int16 PCM)
 └── interpreter.html              # Side-by-side translated text view
 ```
 
@@ -129,7 +149,7 @@ public/
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/api/start` | Admin | Start translation (`{ languages, provider, voiceConfig }`) |
+| POST | `/api/start` | Admin | Start translation (`{ languages, provider, voiceConfig, inputSource }`) |
 | POST | `/api/pause` | Admin | Pause translation |
 | POST | `/api/resume` | Admin | Resume translation |
 | POST | `/api/stop` | Admin | Stop translation |
@@ -141,6 +161,7 @@ public/
 | GET | `/api/audio-level` | Admin | SSE stream — real-time dB meter |
 | GET | `/api/key-status` | Admin | API key tier detection |
 | WS | `/ws` | — | Audio broadcast to attendee browsers |
+| WS | `/ws/admin-input` | Admin | Browser-captured audio upload (Browser/System source) |
 
 ## Hotwords
 

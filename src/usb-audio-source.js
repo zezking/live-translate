@@ -25,7 +25,7 @@ function soxCoreAudioDevice(deviceName) {
   ], { stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
-export class AudioCapture extends EventEmitter {
+export class UsbAudioSource extends EventEmitter {
   constructor() {
     super();
     this.recorder = null;
