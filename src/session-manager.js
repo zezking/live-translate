@@ -132,7 +132,7 @@ export class SessionManager extends EventEmitter {
     session.on('closed', (info) => {
       this.emit('sessionClosed', info);
       const reason = info?.reason || '';
-      if (this.isRunning && /GoAway|duration|expired|session/i.test(reason)) {
+      if (this.isRunning && /GoAway|duration|expired|session|repeat/i.test(reason)) {
         this._reconnectSession(code);
       }
     });
