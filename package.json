@@ -10,7 +10,7 @@
     "test": "node --test test/*.test.js",
     "dev:server": "npm -w server run dev",
     "dev:web": "npm -w web run dev",
-    "build:v2": "npm -w server run build && npm -w web run build",
+    "build:v2": "npm -w shared run typecheck && npm -w server run build && npm -w web run build",
     "test:v2": "npm -w server test --silent && npm -w web test --silent"
   },
   "repository": {
