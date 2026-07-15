@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #faf9f7;
+  --color-foreground: #2a2724;
+  --color-card: #ffffff;
+  --color-muted: #f1ede7;
+  --color-muted-foreground: #6b6358;
+  --color-primary: #c0623a;          /* warm terracotta accent */
+  --color-primary-foreground: #ffffff;
+  --color-border: #e7e0d6;
+  --color-ring: #c0623a;
+  --radius: 0.75rem;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+}
+
+html, body, #root { height: 100%; }
+body { background: var(--color-background); color: var(--color-foreground); font-family: var(--font-sans); }
+
+/* Korean needs more vertical breathing room */
+:lang(ko) { line-height: 1.6; }
