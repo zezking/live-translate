@@ -177,3 +177,66 @@ describe('SessionManager reconnect backoff', () => {
     expect(createSpy).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Fake session whose connect() always rejects — used to exercise the
+ * "all language sessions failed to connect" guard in start().
+ */
+class RejectingFakeSession extends EventEmitter {
+  languageCode: string;
+  isActive = true;
+  constructor(_apiKey: string, code: string) {
+    super();
+    this.languageCode = code;
+  }
+  async connect(): Promise<void> {
+    throw new Error('connect failed (fake)');
+  }
+  sendAudio(): void {
+    // no-op
+  }
+  async disconnect(): Promise<void> {
+    this.isActive = false;
+  }
+  getUsage() {
+    return { languageCode: this.languageCode, inputMinutes: 0, outputMinutes: 0 };
+  }
+}
+
+describe('SessionManager start() all-failed guard', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('throws "All N language sessions failed to connect" and does NOT set isRunning / emit started', async () => {
+    const mgr = new SessionManager();
+    const tm = mgr as unknown as TestManager;
+    const n = SessionManager.LANGUAGES.length; // 5 enabled by default
+    expect(mgr.enabledLanguages.size).toBe(n);
+
+    // Intercept _createSession so start() creates rejecting fakes instead of
+    // real provider sessions — no real socket ever opens. start() still runs
+    // its real Promise.all + all-failed guard logic.
+    vi.spyOn(tm, '_createSession').mockImplementation((code: string) => {
+      const fake = new RejectingFakeSession('test-key', code);
+      return fake as unknown as ReturnType<typeof tm._createSession>;
+    });
+
+    const startedSpy = vi.fn();
+    mgr.on('started', startedSpy);
+
+    await expect(mgr.start({ gemini: 'test-key' }, 'gemini', {})).rejects.toThrow(
+      `All ${n} language sessions failed to connect`,
+    );
+
+    // Must NOT transition to running, and must NOT have emitted 'started'.
+    expect(mgr.isRunning).toBe(false);
+    expect(startedSpy).not.toHaveBeenCalled();
+    // Every failed session was removed from the map by the catch handler.
+    expect(mgr.sessions.size).toBe(0);
+  });
+});

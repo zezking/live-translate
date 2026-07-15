@@ -154,7 +154,7 @@ export class SessionManager extends EventEmitter {
     this._voiceConfig = voiceConfig;
     this._SessionClass = SessionClass;
 
-    const promises: Promise<void>[] = [];
+    const promises: Promise<void | null>[] = [];
 
     for (const code of this.enabledLanguages) {
       try {
@@ -163,7 +163,10 @@ export class SessionManager extends EventEmitter {
         promises.push(
           session.connect().catch((err: unknown) => {
             this.sessions.delete(code);
-            return undefined;
+            // Failures resolve to `null`; successes (Promise<void>) resolve to
+            // `undefined`. The all-failed guard below filters `r === undefined`
+            // to count SUCCESSES — returning `null` here keeps the two distinct.
+            return null;
           }),
         );
       } catch (err) {
