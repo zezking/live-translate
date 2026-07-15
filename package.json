@@ -3,10 +3,15 @@
   "version": "1.0.0",
   "description": "AI-powered real-time sermon translation for Center Church using Google Gemini 3.5 Live Translate.",
   "main": "src/server.js",
+  "workspaces": ["web", "server", "shared"],
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "dev:server": "npm -w server run dev",
+    "dev:web": "npm -w web run dev",
+    "build:v2": "npm -w server run build && npm -w web run build",
+    "test:v2": "npm -w server test --silent && npm -w web test --silent"
   },
   "repository": {
     "type": "git",
