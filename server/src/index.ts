@@ -12,7 +12,10 @@ import { BrowserAudioSource, WS_ADMIN_INPUT_PATH } from './browser-audio-source.
 import { SessionManager } from './session-manager.js';
 import { QwenTranslationSession, type VoiceConfig } from './qwen-translation-session.js';
 import { AudioBroadcaster } from './audio-broadcaster.js';
-import { generateQRCode, getLocalIP } from './qr-generator.js';
+import { generateQRCode, generateQRCodeForUrl, getLocalIP } from './qr-generator.js';
+import { ConversationManager } from './conversation-manager.js';
+import { ConversationTransport, WS_CONVERSATION_PATH } from './conversation-transport.js';
+import type { ConversationSession } from './conversation-session.js';
 import { healthRouter } from './routes/health.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -44,6 +47,9 @@ const broadcaster = new AudioBroadcaster(server);
 const browserAudioSource = new BrowserAudioSource(server, ADMIN_PASSWORD);
 browserAudioSource.start();
 
+const conversationManager = new ConversationManager();
+const conversationTransport = new ConversationTransport(conversationManager);
+
 // --- manual WS-upgrade routing ------------------------------------------
 // ws v8 aborts non-matching paths, which destroys the socket before other WSS
 // instances can handle it. Capture the broadcaster's '/ws' listener(s), remove
@@ -56,6 +62,8 @@ server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
   const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
   if (pathname === WS_ADMIN_INPUT_PATH) {
     browserAudioSource.handleUpgrade(req, socket, head);
+  } else if (pathname === WS_CONVERSATION_PATH) {
+    conversationTransport.handleUpgrade(req, socket, head);
   } else {
     for (const listener of existingUpgradeListeners) {
       listener.call(server, req, socket, head);
@@ -131,6 +139,10 @@ app.get('/admin', (_req, res) => {
 
 app.get('/interpreter', (_req, res) => {
   res.sendFile(path.join(__dirname, '..', '..', 'public', 'interpreter.html'));
+});
+
+app.get('/conversation', (_req, res) => {
+  res.sendFile(path.join(__dirname, '..', '..', 'public', 'conversation.html'));
 });
 
 // --- session manager -> broadcaster wiring ------------------------------
@@ -302,6 +314,80 @@ app.get('/api/audio-level', requireAdmin, (req, res) => {
   req.on('close', () => {
     activeSource.removeListener('chunk', handler);
   });
+});
+
+// --- conversation routes -------------------------------------------------
+app.post('/api/conversation/create', requireAdmin, async (req, res) => {
+  let roomId: string | undefined;
+  let session: ConversationSession | undefined;
+  try {
+    const { hostName, partnerName, voiceOver, voiceClone } = (req.body ?? {}) as {
+      hostName?: string;
+      partnerName?: string;
+      voiceOver?: boolean;
+      voiceClone?: boolean;
+    };
+    const apiKey = apiKeys.qwen;
+    if (!apiKey) {
+      res.status(400).json({ error: 'No Qwen API key configured (DASHSCOPE_API_KEY)' });
+      return;
+    }
+    const created = conversationManager.createRoom({
+      apiKey,
+      names: { host: hostName || 'You', joiner: partnerName || 'Partner' },
+      config: { voiceOver: !!voiceOver, voiceClone: !!voiceClone },
+    });
+    roomId = created.roomId;
+    session = created.session;
+    await session.start();
+    const ip = await getLocalIP();
+    const joinUrl = `${req.protocol}://${ip}:${PORT}/conversation?token=${created.joinToken}`;
+    const qrDataUrl = await generateQRCodeForUrl(joinUrl);
+    res.json({ roomId, hostToken: created.hostToken, joinToken: created.joinToken, joinUrl, qrDataUrl });
+  } catch (err) {
+    try {
+      if (session) await session.stop();
+    } catch {
+      /* ignore cleanup error */
+    }
+    if (roomId) conversationManager.removeRoom(roomId);
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/conversation/config', requireAdmin, async (req, res) => {
+  const { roomId, voiceOver, voiceClone } = (req.body ?? {}) as {
+    roomId: string;
+    voiceOver?: boolean;
+    voiceClone?: boolean;
+  };
+  const room = conversationManager.getRoom(roomId);
+  if (!room) {
+    res.status(404).json({ error: 'room not found' });
+    return;
+  }
+  await room.session.setConfig({ voiceOver, voiceClone });
+  res.json({ ok: true });
+});
+
+app.post('/api/conversation/end', requireAdmin, async (req, res) => {
+  const { roomId } = (req.body ?? {}) as { roomId: string };
+  const room = conversationManager.getRoom(roomId);
+  if (!room) {
+    res.status(404).json({ error: 'room not found' });
+    return;
+  }
+  await room.session.stop();
+  conversationManager.removeRoom(roomId);
+  res.json({ ok: true });
+});
+
+conversationManager.on('error', ({ role, error }: { role: string; error: unknown }) => {
+  const msg =
+    typeof error === 'object' && error !== null
+      ? ((error as Record<string, unknown>).error || (error as Error).message || JSON.stringify(error))
+      : error;
+  console.error(`[conversation:${role}] error: ${msg}`);
 });
 
 // --- boot ----------------------------------------------------------------

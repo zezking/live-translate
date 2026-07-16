@@ -25,3 +25,11 @@ export async function generateQRCode(port: number = 3000): Promise<{ url: string
   });
   return { url, dataUrl };
 }
+
+export async function generateQRCodeForUrl(url: string): Promise<string> {
+  return QRCode.toDataURL(url, {
+    width: 300,
+    margin: 2,
+    color: { dark: '#000000', light: '#FFFFFF' },
+  });
+}
