@@ -14,3 +14,18 @@ describe('QwenTranslationSession delta handling', () => {
     expect(out.join('')).toBe('你好世界今天');
   });
 });
+
+describe('QwenTranslationSession config', () => {
+  it('uses sourceLanguage in the input transcription config', () => {
+    const s = new QwenTranslationSession('key', 'ko', {}, { sourceLanguage: 'zh', modalities: ['text'] });
+    const cfg = (s as any)._buildSessionConfig('ko');
+    expect(cfg.input_audio_transcription.language).toBe('zh');
+    expect(cfg.modalities).toEqual(['text']);
+  });
+  it('defaults sourceLanguage=en and modalities=[text,audio] (church-mode compat)', () => {
+    const s = new QwenTranslationSession('key', 'ko', {}, {});
+    const cfg = (s as any)._buildSessionConfig('ko');
+    expect(cfg.input_audio_transcription.language).toBe('en');
+    expect(cfg.modalities).toEqual(['text', 'audio']);
+  });
+});

@@ -44,6 +44,8 @@ const SUPPORTED_VOICES: string[] = VOICE_LIST.map((v) => v.value);
 export interface VoiceConfig {
   enableVoiceClone?: boolean;
   voice?: string;
+  sourceLanguage?: string;
+  modalities?: string[];
 }
 
 /** Per-language hotword corpus: language code -> phrase map. */
@@ -88,6 +90,8 @@ export class QwenTranslationSession extends EventEmitter {
   hotwords: Hotwords;
   enableVoiceClone: boolean;
   voiceName: string;
+  sourceLanguage: string;
+  _modalities: string[];
   ws: WebSocket | null;
   isActive: boolean;
   inputMinutes: number;
@@ -110,6 +114,8 @@ export class QwenTranslationSession extends EventEmitter {
     this.voiceName = SUPPORTED_VOICES.includes(voiceConfig.voice ?? '')
       ? voiceConfig.voice!
       : 'Tina';
+    this.sourceLanguage = voiceConfig.sourceLanguage ?? 'en';
+    this._modalities = voiceConfig.modalities ?? ['text', 'audio'];
     this.ws = null;
     this.isActive = false;
     this.inputMinutes = 0;
@@ -149,23 +155,7 @@ export class QwenTranslationSession extends EventEmitter {
       });
 
       this.ws.on('open', () => {
-        const sessionConfig: QwenSessionConfig = {
-          modalities: ['text', 'audio'],
-          input_audio_transcription: {
-            language: 'en',
-            model: 'qwen3-asr-flash-realtime',
-          },
-          translation: this._buildTranslationConfig(targetLang),
-        };
-
-        if (this.enableVoiceClone) {
-          sessionConfig.voice = 'default';
-          sessionConfig.enable_voice_clone = true;
-          sessionConfig.voice_clone_options = { frequency: 'once' };
-        } else {
-          sessionConfig.voice = this.voiceName;
-          sessionConfig.enable_voice_clone = false;
-        }
+        const sessionConfig = this._buildSessionConfig(targetLang);
 
         const sessionUpdate = {
           type: 'session.update',
@@ -217,6 +207,28 @@ export class QwenTranslationSession extends EventEmitter {
       config.corpus = { phrases };
     }
     return config;
+  }
+
+  _buildSessionConfig(targetLang: string): QwenSessionConfig {
+    const sessionConfig: QwenSessionConfig = {
+      modalities: this._modalities,
+      input_audio_transcription: {
+        language: mapLang(this.sourceLanguage),
+        model: 'qwen3-asr-flash-realtime',
+      },
+      translation: this._buildTranslationConfig(targetLang),
+    };
+
+    if (this.enableVoiceClone) {
+      sessionConfig.voice = 'default';
+      sessionConfig.enable_voice_clone = true;
+      sessionConfig.voice_clone_options = { frequency: 'once' };
+    } else {
+      sessionConfig.voice = this.voiceName;
+      sessionConfig.enable_voice_clone = false;
+    }
+
+    return sessionConfig;
   }
 
   _handleMessage(msg: QwenWsMessage): void {
