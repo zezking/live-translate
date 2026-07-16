@@ -9,3 +9,5 @@ dist/
 # v2 build artifacts
 /web/dist/
 /server/dist/
+
+.superpowers/
