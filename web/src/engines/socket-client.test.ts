@@ -49,4 +49,26 @@ describe('SocketClient', () => {
     c.sendAudio(new ArrayBuffer(8));
     expect(ws.sent[0]).toBeInstanceOf(ArrayBuffer);
   });
+  it('fires onOpen when the socket opens', () => {
+    let opened = false;
+    let ws: any;
+    const c = new SocketClient({ url: 'wss://x', onMessage: () => {}, onOpen: () => { opened = true; }, WebSocketCtor: (() => { return ws = fakeWs(); }) as any });
+    c.connect();
+    ws.listeners['open'][0]();
+    expect(opened).toBe(true);
+  });
+  it('fires onReconnecting on a transient close (before the backoff reconnect)', () => {
+    const factory = vi.fn(() => fakeWs());
+    let reconnecting = 0;
+    const c = new SocketClient({ url: 'wss://x', onMessage: () => {}, onReconnecting: () => { reconnecting++; }, WebSocketCtor: factory as any, reconnectBaseDelay: 1000 });
+    c.connect();
+    const first = factory.mock.results[0].value;
+    first.listeners['open'][0]();
+    first.listeners['close'][0]({ code: 1006 }); // transient
+    expect(reconnecting).toBe(1);
+    vi.advanceTimersByTime(1002); // reconnect fires; open the new socket
+    const second = factory.mock.results[1].value;
+    second.listeners['open'][0]();
+    expect(reconnecting).toBe(1); // onReconnecting not re-fired until another transient close
+  });
 });

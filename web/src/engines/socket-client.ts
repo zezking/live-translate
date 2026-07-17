@@ -10,6 +10,10 @@ export interface SocketClientOptions {
   onMessage: (m: ConversationWsMessage) => void;
   /** Called once when the socket closes terminally (code 1008 or explicit close). No reconnect follows. */
   onCloseTerminal?: () => void;
+  /** Called when the socket opens (including after a reconnect). */
+  onOpen?: () => void;
+  /** Called when a transient close schedules a reconnect (drive a "reconnecting" UI). */
+  onReconnecting?: () => void;
   /** Injectable WebSocket constructor (defaults to the global one). Enables fake-timer unit tests. */
   WebSocketCtor?: typeof WebSocket;
   /** Base delay (ms) for the first reconnect; doubles each attempt, capped at 60s. Defaults to 1000. */
@@ -46,6 +50,7 @@ export class SocketClient {
     this._attach(ws, 'open', () => {
       if (ws !== this._ws) return; // stale socket
       this._attempts = 0;
+      this.opts.onOpen?.();
     });
 
     this._attach(ws, 'message', (ev: { data: unknown }) => {
@@ -117,6 +122,7 @@ export class SocketClient {
 
   /** Schedule a reconnect with exponential backoff: `min(60000, base * 2**(attempts-1))`. */
   private _scheduleReconnect(): void {
+    this.opts.onReconnecting?.();
     this._attempts += 1;
     const delay = Math.min(60000, this._base * 2 ** (this._attempts - 1));
     this._timer = setTimeout(() => {
