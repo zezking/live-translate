@@ -11,7 +11,7 @@ interface Props {
 function RiverTurn({ turn, role, names }: { turn: Turn; role: Role; names: Props['names'] }) {
   const isMe = turn.speaker === role;
   const labelColor = turn.speaker === 'host' ? 'text-primary' : 'text-[#3a7a5a]';
-  const label = isMe ? names[turn.speaker] || turn.speaker : names[turn.speaker] || turn.speaker;
+  const label = names[turn.speaker] || turn.speaker;
   const main = isMe ? turn.original : turn.translation || turn.original;
   const sub = isMe ? '' : turn.original;
   return (

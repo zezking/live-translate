@@ -2,13 +2,15 @@ import { Switch } from '@/components/ui/switch';
 import { BottomSheet } from './BottomSheet.js';
 import { useT } from '../i18n.js';
 import type { Role } from '@v2/shared';
-import type { ConversationConfig, ConversationState } from '../types.js';
+import type { ConversationConfig } from '../types.js';
 
 interface Props {
   open: boolean;
   role: Role;
   config: ConversationConfig;
   devices: MediaDeviceInfo[];
+  /** Currently selected mic deviceId — controlled by the page so the picker doesn't snap back. */
+  selectedDeviceId: string;
   paused: boolean;
   onClose: () => void;
   onVoiceOver: (v: boolean) => void;
@@ -41,7 +43,7 @@ export function ControlsSheet(p: Props) {
         <Row label={`🎤 ${t('mic')}`}>
           <select
             className="bg-transparent text-sm text-muted-foreground"
-            value={p.devices[0]?.deviceId ?? ''}
+            value={p.selectedDeviceId}
             onChange={(e) => p.onMic(e.target.value)}
           >
             {p.devices.map((d, i) => (

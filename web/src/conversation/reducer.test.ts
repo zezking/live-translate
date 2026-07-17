@@ -80,4 +80,12 @@ describe('conversationReducer', () => {
     st = conversationReducer(st, { type: 'config', config: { voiceOver: true, voiceClone: false } });
     expect(st.config).toEqual({ voiceOver: true, voiceClone: false });
   });
+
+  it('error sets a message; clearError clears it', () => {
+    let st = s();
+    st = conversationReducer(st, { type: 'error', message: 'mic_blocked' });
+    expect(st.error).toBe('mic_blocked');
+    st = conversationReducer(st, { type: 'clearError' });
+    expect(st.error).toBeNull();
+  });
 });

@@ -14,6 +14,8 @@ export interface UseConversationOptions {
 export interface UseConversationApi {
   state: ConversationState;
   devices: MediaDeviceInfo[];
+  /** Currently selected mic deviceId ('' until the mic starts or the user picks one). */
+  selectedDeviceId: string;
   createRoom: (hostName: string, partnerName: string) => Promise<void>;
   joinRoom: () => Promise<void>;
   setVoiceOver: (v: boolean) => void;
@@ -22,6 +24,7 @@ export interface UseConversationApi {
   pause: () => void;
   resume: () => void;
   endConversation: () => Promise<void>;
+  clearError: () => void;
 }
 
 function readToken(): string | null {
@@ -43,6 +46,7 @@ export function useConversation({ adminKey, getToken = readToken }: UseConversat
 
   const [state, dispatch] = useReducer(conversationReducer, role, createInitialState);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState('');
 
   // Engine refs (high-frequency / browser state stays out of React state).
   const socketRef = useRef<SocketClient | null>(null);
@@ -110,15 +114,21 @@ export function useConversation({ adminKey, getToken = readToken }: UseConversat
     }
     try {
       await micRef.current.start(deviceId);
-      setDevices(await micRef.current.listDevices());
+      const list = await micRef.current.listDevices();
+      setDevices(list);
+      // Default the picker to the active (or first) device unless the user already picked one.
+      setSelectedDeviceId((cur) => cur || micRef.current?.deviceId || list[0]?.deviceId || '');
     } catch {
       dispatch({ type: 'error', message: 'mic_blocked' });
     }
   }, []);
 
+  const clearError = useCallback(() => dispatch({ type: 'clearError' }), []);
+
   // ---- host: create room ----
   const createRoom = useCallback(
     async (hostName: string, partnerName: string) => {
+      dispatch({ type: 'clearError' }); // retry clears the old error
       try {
         await ensurePlayback(); // unlock audio on the Begin gesture
         const res = await fetch('/api/conversation/create', {
@@ -149,6 +159,7 @@ export function useConversation({ adminKey, getToken = readToken }: UseConversat
   // ---- joiner: join ----
   const joinRoom = useCallback(async () => {
     if (!token) return;
+    dispatch({ type: 'clearError' }); // retry clears the old error
     try {
       await ensurePlayback(); // unlock audio on the 참여하기 gesture
       connectSocket(token);
@@ -184,6 +195,7 @@ export function useConversation({ adminKey, getToken = readToken }: UseConversat
   }, [sendConfig]);
 
   const setMicDevice = useCallback(async (deviceId: string) => {
+    setSelectedDeviceId(deviceId);
     if (micRef.current) await micRef.current.setDevice(deviceId);
   }, []);
 
@@ -210,16 +222,14 @@ export function useConversation({ adminKey, getToken = readToken }: UseConversat
     dispatch({ type: 'end' });
   }, []);
 
-  // joiner auto-connects on mount (the joiner lands straight on the welcome screen;
-  // tapping 참여하기 calls joinRoom). Nothing auto-runs for the host.
+  // cleanup engines on unmount
   useEffect(() => {
     return () => {
-      // cleanup on unmount
       socketRef.current?.close();
       void micRef.current?.stop();
       playbackRef.current?.close();
     };
   }, []);
 
-  return { state, devices, createRoom, joinRoom, setVoiceOver, setVoiceClone, setMicDevice, pause, resume, endConversation };
+  return { state, devices, selectedDeviceId, createRoom, joinRoom, setVoiceOver, setVoiceClone, setMicDevice, pause, resume, endConversation, clearError };
 }

@@ -7,6 +7,7 @@ const wrap = (ui: React.ReactNode) => <I18nProvider locale="en">{ui}</I18nProvid
 const base = {
   open: true, role: 'host' as const, config: { voiceOver: false, voiceClone: false },
   devices: [{ deviceId: 'd1', kind: 'audioinput', label: 'AirPods', groupId: 'g' } as MediaDeviceInfo],
+  selectedDeviceId: 'd1',
   paused: false, onClose: () => {}, onVoiceOver: () => {}, onVoiceClone: () => {},
   onMic: () => {}, onPause: () => {}, onResume: () => {}, onEnd: () => {},
 };

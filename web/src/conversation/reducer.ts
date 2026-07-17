@@ -1,5 +1,5 @@
 import type { Role } from '@v2/shared';
-import type { Action, ConversationState, ConversationConfig, Turn } from './types.js';
+import type { Action, ConversationState, Turn } from './types.js';
 
 export function createInitialState(role: Role): ConversationState {
   return {
@@ -88,9 +88,4 @@ export function conversationReducer(state: ConversationState, action: Action): C
     default:
       return state;
   }
-}
-
-// Re-export config helper for the hook's optimistic updates.
-export function configOf(voiceOver: boolean, voiceClone: boolean): ConversationConfig {
-  return { voiceOver, voiceClone };
 }

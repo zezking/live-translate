@@ -7,6 +7,7 @@ import { RiverTranscript } from '@/conversation/components/RiverTranscript';
 import { StatusLine } from '@/conversation/components/StatusLine';
 import { StateOverlay } from '@/conversation/components/StateOverlay';
 import { ControlsSheet } from '@/conversation/components/ControlsSheet';
+import { ErrorLine } from '@/conversation/components/ErrorLine';
 
 function ConversationInner() {
   const { adminKey, setAdminKey } = useAuth();
@@ -58,17 +59,20 @@ function ConversationInner() {
         {overlay && state.phase !== 'onboarding' && (
           <StateOverlay
             kind={overlay as 'waiting' | 'partnerAway' | 'reconnecting' | 'paused' | 'ended'}
-            names={state.names}
+            partnerName={state.role === 'host' ? state.names.joiner : state.names.host}
             onResume={conv.resume}
             onBeginAnother={() => window.location.reload()}
           />
         )}
+
+        {state.error && <ErrorLine message={state.error} onDismiss={conv.clearError} />}
 
         <ControlsSheet
           open={sheetOpen}
           role={state.role}
           config={state.config}
           devices={conv.devices}
+          selectedDeviceId={conv.selectedDeviceId}
           paused={state.paused}
           onClose={() => setSheetOpen(false)}
           onVoiceOver={conv.setVoiceOver}

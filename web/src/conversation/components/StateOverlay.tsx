@@ -1,20 +1,16 @@
 import { Button } from '@/components/ui/button';
 import { useT } from '../i18n.js';
-import type { ConversationState } from '../types.js';
 
 interface Props {
   kind: 'waiting' | 'partnerAway' | 'reconnecting' | 'paused' | 'ended';
-  names: { host: string; joiner: string };
+  /** Display name of the other party — the page computes it role-aware (host sees joiner, joiner sees host). */
+  partnerName: string;
   onResume: () => void;
   onBeginAnother: () => void;
 }
 
-export function StateOverlay({ kind, names, onResume, onBeginAnother }: Props) {
+export function StateOverlay({ kind, partnerName, onResume, onBeginAnother }: Props) {
   const t = useT();
-  // The partner is whoever "me" is not. The page passes role via names usage; here we show the joiner
-  // name for the host and vice-versa by rendering both-friendly copy. For partner-away we use the joiner
-  // name when the host is viewing (most common); the page may pass the explicit partner name via names.joiner.
-  const partner = names.joiner || names.host;
   return (
     <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/80 px-8 text-center backdrop-blur-sm">
       <div className="max-w-sm space-y-2">
@@ -25,7 +21,7 @@ export function StateOverlay({ kind, names, onResume, onBeginAnother }: Props) {
         )}
         {kind === 'partnerAway' && (
           <>
-            <p className="text-lg text-foreground"><span className="font-semibold">{partner}</span> {t('partner_away')}</p>
+            <p className="text-lg text-foreground"><span className="font-semibold">{partnerName}</span> {t('partner_away')}</p>
           </>
         )}
         {kind === 'reconnecting' && <p className="text-lg text-foreground">{t('reconnecting')}</p>}
