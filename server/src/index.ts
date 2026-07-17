@@ -114,6 +114,8 @@ async function detectGeminiTier(): Promise<string> {
 // --- express middleware + static + page routes --------------------------
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', '..', 'public')));
+const webDist = path.join(__dirname, '..', '..', 'web', 'dist');
+app.use('/assets', express.static(path.join(webDist, 'assets')));
 app.use('/api/health', healthRouter);
 
 const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction): void => {
@@ -142,7 +144,15 @@ app.get('/interpreter', (_req, res) => {
 });
 
 app.get('/conversation', (_req, res) => {
-  res.sendFile(path.join(__dirname, '..', '..', 'public', 'conversation.html'));
+  const idx = path.join(webDist, 'index.html');
+  if (existsSync(idx)) {
+    res.sendFile(idx);
+  } else {
+    res
+      .status(503)
+      .type('text/plain')
+      .send('v2 conversation UI not built. Run `npm run build:v2`, or open the Vite dev server (npm run dev:web) at /conversation.');
+  }
 });
 
 // --- session manager -> broadcaster wiring ------------------------------
