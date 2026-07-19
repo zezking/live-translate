@@ -13,6 +13,22 @@ describe('QwenTranslationSession delta handling', () => {
     ]) (s as any)._handleMessage(e);
     expect(out.join('')).toBe('你好世界今天');
   });
+
+  it('emits outputTranscription from response.text.text (text-only modality channel)', () => {
+    // With modalities ['text'] (voice-over off), Qwen delivers the translation via
+    // `response.text.text` — `response.audio_transcript.text` only fires when the
+    // session includes the audio modality (verified against the live API). The two
+    // channels are mutually exclusive, so they share the cumulative-delta tracker.
+    const s = new QwenTranslationSession('key', 'ko', {}, { sourceLanguage: 'zh', modalities: ['text'] });
+    const out: string[] = []; s.on('outputTranscription', (t: string) => out.push(t));
+    for (const e of [
+      { type: 'response.text.text', text: '안녕하세요,' },
+      { type: 'response.text.text', text: '안녕하세요, 저는' },
+      { type: 'response.text.done' },
+      { type: 'response.text.text', text: '안녕하세요, 저는 오늘의 강사입니다.' },
+    ]) (s as any)._handleMessage(e);
+    expect(out.join('')).toBe('안녕하세요, 저는 오늘의 강사입니다.');
+  });
 });
 
 describe('QwenTranslationSession config', () => {

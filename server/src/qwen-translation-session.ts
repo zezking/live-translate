@@ -250,7 +250,12 @@ export class QwenTranslationSession extends EventEmitter {
         // Do NOT reset _lastInputText — transcript is cumulative.
         break;
 
-      case 'response.audio_transcript.text': {
+      case 'response.audio_transcript.text':
+      case 'response.text.text': {
+        // Output text channel is modality-dependent and mutually exclusive:
+        // audio sessions emit `response.audio_transcript.text`; text-only sessions
+        // emit `response.text.text`. Both are cumulative — diff against the last
+        // seen value and emit only the new suffix.
         const newText = msg.text || '';
         const delta = newText.startsWith(this._lastOutputText)
           ? newText.slice(this._lastOutputText.length)
