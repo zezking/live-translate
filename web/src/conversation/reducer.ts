@@ -60,6 +60,21 @@ export function conversationReducer(state: ConversationState, action: Action): C
         const updated: Turn = { ...last, original: text };
         return { ...state, turns: [...turns.slice(0, -1), updated] };
       }
+      if (state.activeDirection === lang) {
+        // First snapshot of a fresh press — start a new active turn.
+        const fresh: Turn = { id: `${lang}-${turns.length}`, lang, original: text, translation: '', active: true };
+        return { ...state, turns: [...turns.map((t) => ({ ...t, active: false })), fresh] };
+      }
+      // No active direction → late finalization (Qwen emits its final text
+      // after release). Update the most recent turn of this language rather
+      // than spawning a spurious new one.
+      for (let i = turns.length - 1; i >= 0; i--) {
+        if (turns[i].lang === lang) {
+          const updated: Turn = { ...turns[i], original: text };
+          return { ...state, turns: [...turns.slice(0, i), updated, ...turns.slice(i + 1)] };
+        }
+      }
+      // No turn of this language at all — create one.
       const fresh: Turn = { id: `${lang}-${turns.length}`, lang, original: text, translation: '', active: true };
       return { ...state, turns: [...turns.map((t) => ({ ...t, active: false })), fresh] };
     }

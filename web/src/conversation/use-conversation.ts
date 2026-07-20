@@ -33,6 +33,12 @@ function wsUrl(): string {
   return `${proto}//${window.location.host}/ws/conversation`;
 }
 
+// Rolling pre-roll buffer (~300 ms at 100 ms/chunk) and release linger so
+// words spoken just before pressing / just after releasing are captured
+// instead of clipped at the PTT boundary.
+const PRE_ROLL_CHUNKS = 3;
+const LINGER_MS = 400;
+
 export function useConversation({ adminKey, onUnauthorized }: UseConversationOptions): UseConversationApi {
   const [state, dispatch] = useReducer(conversationReducer, undefined, createInitialState);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -45,6 +51,12 @@ export function useConversation({ adminKey, onUnauthorized }: UseConversationOpt
   stateRef.current = state;
   const adminKeyRef = useRef(adminKey);
   adminKeyRef.current = adminKey;
+  // Direction audio is currently routed to. Decoupled from the reducer's
+  // activeDirection (which drives the UI): it survives the release-linger so
+  // trailing audio keeps flowing until the linger timer fires.
+  const routingDirectionRef = useRef<string | null>(null);
+  const preRollRef = useRef<ArrayBuffer[]>([]);
+  const lingerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const ensurePlayback = useCallback(async () => {
     if (!playbackRef.current) playbackRef.current = new PlaybackEngine();
@@ -56,8 +68,12 @@ export function useConversation({ adminKey, onUnauthorized }: UseConversationOpt
       micRef.current = new MicCaptureEngine({
         workletUrl: '/pcm-worklet.js',
         onAudio: (pcm: ArrayBuffer) => {
-          // Only stream while a direction is held and not paused.
-          if (stateRef.current.activeDirection && !stateRef.current.paused) {
+          // Always keep a rolling pre-roll so lead-in words (spoken just before
+          // the press lands) can be flushed on press.
+          preRollRef.current.push(pcm);
+          if (preRollRef.current.length > PRE_ROLL_CHUNKS) preRollRef.current.shift();
+          // Forward live audio while a direction is routing and not paused.
+          if (routingDirectionRef.current && !stateRef.current.paused) {
             socketRef.current?.sendAudio(pcm);
           }
         },
@@ -171,15 +187,30 @@ export function useConversation({ adminKey, onUnauthorized }: UseConversationOpt
 
   // ---- push-to-talk ----
   const press = useCallback((lang: string) => {
-    if (stateRef.current.activeDirection) return; // single active direction
+    // Cancel any pending release-linger (a new press supersedes it).
+    if (lingerTimerRef.current) {
+      clearTimeout(lingerTimerRef.current);
+      lingerTimerRef.current = null;
+    }
+    if (routingDirectionRef.current === lang) return; // already routing this direction
+    routingDirectionRef.current = lang;
     dispatch({ type: 'direction', from: lang });
     socketRef.current?.sendJson({ type: 'direction', from: lang });
+    // Flush the pre-roll so the start-of-press words are captured.
+    for (const chunk of preRollRef.current) socketRef.current?.sendAudio(chunk);
+    preRollRef.current = [];
   }, []);
 
   const release = useCallback(() => {
-    if (!stateRef.current.activeDirection) return;
+    if (!routingDirectionRef.current || lingerTimerRef.current) return;
+    // UI releases immediately for responsiveness; audio keeps routing through
+    // a short linger so trailing words are captured before the turn finalizes.
     dispatch({ type: 'direction', from: null });
-    socketRef.current?.sendJson({ type: 'direction', from: null });
+    lingerTimerRef.current = setTimeout(() => {
+      lingerTimerRef.current = null;
+      socketRef.current?.sendJson({ type: 'direction', from: null });
+      routingDirectionRef.current = null;
+    }, LINGER_MS);
   }, []);
 
   // ---- config (voice-over / clone) ----
@@ -208,12 +239,22 @@ export function useConversation({ adminKey, onUnauthorized }: UseConversationOpt
   }, []);
 
   const pause = useCallback(() => {
+    if (lingerTimerRef.current) {
+      clearTimeout(lingerTimerRef.current);
+      lingerTimerRef.current = null;
+    }
+    routingDirectionRef.current = null;
     dispatch({ type: 'pause' });
     playbackRef.current?.stopAll();
   }, []);
   const resume = useCallback(() => dispatch({ type: 'resume' }), []);
 
   const endConversation = useCallback(async () => {
+    if (lingerTimerRef.current) {
+      clearTimeout(lingerTimerRef.current);
+      lingerTimerRef.current = null;
+    }
+    routingDirectionRef.current = null;
     dispatch({ type: 'end' });
     socketRef.current?.close(); // server stops the session on socket close
   }, []);
@@ -222,6 +263,7 @@ export function useConversation({ adminKey, onUnauthorized }: UseConversationOpt
 
   useEffect(() => {
     return () => {
+      if (lingerTimerRef.current) clearTimeout(lingerTimerRef.current);
       socketRef.current?.close();
       void micRef.current?.stop();
       playbackRef.current?.close();

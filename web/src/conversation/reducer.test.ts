@@ -41,13 +41,44 @@ describe('conversationReducer (single-device)', () => {
 
   it('turnEnd finalizes that language’s turn; a late translation still lands on it', () => {
     let st = s();
+    st = conversationReducer(st, { type: 'direction', from: 'en' });
     st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'en', text: 'a' });
     st = conversationReducer(st, { type: 'turnEnd', lang: 'en' });
     expect(st.turns[0].active).toBe(false);
     st = conversationReducer(st, { type: 'delta', field: 'translation', lang: 'ko', text: '가' });
     expect(st.turns[0].translation).toBe('가'); // late translation still lands on the turn
+    // a fresh press + snapshot starts a new turn
+    st = conversationReducer(st, { type: 'direction', from: null });
+    st = conversationReducer(st, { type: 'direction', from: 'en' });
     st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'en', text: 'b' });
     expect(st.turns).toHaveLength(2);
+  });
+
+  it('a late original revision after release updates the finalized turn (end-boundary capture)', () => {
+    // Qwen often emits its final, corrected text ~200-500ms after the user
+    // releases. After release (activeDirection cleared) the late snapshot must
+    // update the just-finalized turn, not spawn a spurious new turn.
+    let st = s();
+    st = conversationReducer(st, { type: 'direction', from: 'en' });
+    st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'en', text: 'Hello, it is' });
+    st = conversationReducer(st, { type: 'turnEnd', lang: 'en' });
+    st = conversationReducer(st, { type: 'direction', from: null }); // release
+    st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'en', text: 'Hello. It is wonderful.' });
+    expect(st.turns).toHaveLength(1); // no spurious new turn
+    expect(st.turns[0].original).toBe('Hello. It is wonderful.');
+  });
+
+  it('a new press of the same language starts a fresh turn (not a late-revision update)', () => {
+    let st = s();
+    st = conversationReducer(st, { type: 'direction', from: 'en' });
+    st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'en', text: 'first' });
+    st = conversationReducer(st, { type: 'turnEnd', lang: 'en' });
+    st = conversationReducer(st, { type: 'direction', from: null });
+    st = conversationReducer(st, { type: 'direction', from: 'en' }); // new press
+    st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'en', text: 'second' });
+    expect(st.turns).toHaveLength(2);
+    expect(st.turns[0].original).toBe('first');
+    expect(st.turns[1].original).toBe('second');
   });
 
   it('direction: a second press while one is held is ignored; release clears', () => {
