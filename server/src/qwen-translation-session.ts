@@ -156,17 +156,26 @@ export class QwenTranslationSession extends EventEmitter {
         },
       });
 
-      this.ws.on('open', () => {
+      // Capture this socket so handlers reference the instance they were
+      // registered on, not the mutable `this.ws`. A teardown (disconnect /
+      // session replacement) can null `this.ws` while the socket is still
+      // CONNECTING; its late 'open'/'message'/'close' events must be ignored
+      // rather than crash on `this.ws.send` / spuriously emit 'closed'.
+      const ws = this.ws;
+
+      ws.on('open', () => {
+        if (this.ws !== ws) return; // stale — session replaced/closed during connect
         const sessionConfig = this._buildSessionConfig(targetLang);
 
         const sessionUpdate = {
           type: 'session.update',
           session: sessionConfig,
         };
-        this.ws!.send(JSON.stringify(sessionUpdate));
+        ws.send(JSON.stringify(sessionUpdate));
       });
 
-      this.ws.on('message', (data) => {
+      ws.on('message', (data) => {
+        if (this.ws !== ws) return; // stale
         const msg = JSON.parse(data.toString()) as QwenWsMessage;
         this._handleMessage(msg);
         if (msg.type === 'session.updated') {
@@ -179,21 +188,25 @@ export class QwenTranslationSession extends EventEmitter {
         }
       });
 
-      this.ws.on('error', (err: Error) => {
+      ws.on('error', (err: Error) => {
         this.emit('error', { languageCode: this.languageCode, error: err.message });
         doReject(err);
       });
 
-      this.ws.on('close', (code: number, reason: Buffer) => {
+      ws.on('close', (code: number, reason: Buffer) => {
         this.isActive = false;
         if (!settled) {
           doReject(new Error(`WebSocket closed before session updated: ${reason}`));
         }
-        this.emit('closed', {
-          languageCode: this.languageCode,
-          reason: reason.toString(),
-          code,
-        });
+        // Only surface 'closed' for the active socket — a stale (replaced)
+        // socket closing must not trigger a spurious reconnect.
+        if (this.ws === ws) {
+          this.emit('closed', {
+            languageCode: this.languageCode,
+            reason: reason.toString(),
+            code,
+          });
+        }
       });
     });
   }
