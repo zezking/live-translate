@@ -60,10 +60,15 @@ export class ConversationTransport {
   }
 
   private _onConnection(ws: WebSocket): void {
+    ws.on('error', (err) => {
+      console.error('[conversation] ws error:', err instanceof Error ? err.message : err);
+    });
+
     let started = false;
     const timeout = setTimeout(() => {
       if (!started) ws.close(1008, 'start required');
     }, this._startTimeoutMs);
+    ws.on('close', () => clearTimeout(timeout));
 
     ws.on('message', (data: unknown, isBinary: boolean) => {
       if (started) {
