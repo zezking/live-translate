@@ -29,6 +29,24 @@ describe('QwenTranslationSession delta handling', () => {
     ]) (s as any)._handleMessage(e);
     expect(out.join('')).toBe('안녕하세요, 저는 오늘의 강사입니다.');
   });
+
+  it('emits inputTranscription from the `stash` field (live ASR partials)', () => {
+    // The live API delivers running ASR in `stash` with `text` empty until
+    // finalize (verified against qwen3.5-livetranslate-flash-realtime). The
+    // handler must read `stash`, else source-language "original" deltas never
+    // emit. `stash` is cumulative for the utterance, so the startsWith-diff
+    // applies; `text` (committed) is included when present.
+    const s = new QwenTranslationSession('key', 'ko', {}, { sourceLanguage: 'en', modalities: ['text'] });
+    const input: string[] = []; s.on('inputTranscription', (t: string) => input.push(t));
+    for (const e of [
+      { type: 'conversation.item.input_audio_transcription.text', text: '', stash: 'Hello' },
+      { type: 'conversation.item.input_audio_transcription.text', text: '', stash: 'Hello. It is' },
+      { type: 'conversation.item.input_audio_transcription.completed' },
+      { type: 'conversation.item.input_audio_transcription.text', text: '', stash: 'Welcome' },
+    ]) (s as any)._handleMessage(e);
+    // First utterance accumulates, then a fresh utterance after .completed.
+    expect(input.join('|')).toBe('Hello|. It is|Welcome');
+  });
 });
 
 describe('QwenTranslationSession config', () => {

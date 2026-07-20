@@ -56,6 +56,8 @@ interface QwenWsMessage {
   type: string;
   text?: string;
   delta?: string;
+  /** Live ASR partial (cumulative for the utterance); `text` is empty until finalize. */
+  stash?: string;
   error?: { message?: string };
 }
 
@@ -238,7 +240,10 @@ export class QwenTranslationSession extends EventEmitter {
         break;
 
       case 'conversation.item.input_audio_transcription.text': {
-        const newText = msg.text || '';
+        // Live ASR partials arrive in `stash` (cumulative for the utterance);
+        // `text` is empty until finalize (verified against the live API). Read
+        // both: `text` carries any committed prefix, `stash` the running tail.
+        const newText = (msg.text || '') + (msg.stash || '');
         const delta = newText.startsWith(this._lastInputText)
           ? newText.slice(this._lastInputText.length)
           : newText;
