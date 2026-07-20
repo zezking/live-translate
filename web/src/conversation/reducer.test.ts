@@ -1,0 +1,88 @@
+import { describe, it, expect } from 'vitest';
+import { conversationReducer, createInitialState } from './reducer.js';
+
+describe('conversationReducer (single-device)', () => {
+  const s = () => createInitialState();
+
+  it('groups consecutive same-language original deltas into one active turn', () => {
+    let st = s();
+    st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'en', text: 'How ' });
+    st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'en', text: 'are you' });
+    expect(st.turns).toHaveLength(1);
+    expect(st.turns[0]).toMatchObject({ lang: 'en', original: 'How are you', active: true });
+  });
+
+  it('translation deltas join the most recent turn of the OTHER language', () => {
+    let st = s();
+    st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'en', text: 'hello' });
+    st = conversationReducer(st, { type: 'delta', field: 'translation', lang: 'ko', text: '안녕' });
+    expect(st.turns).toHaveLength(1);
+    expect(st.turns[0].translation).toBe('안녕');
+  });
+
+  it('a new language starts a new turn and finalizes the previous', () => {
+    let st = s();
+    st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'en', text: 'a' });
+    st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'ko', text: '가' });
+    expect(st.turns).toHaveLength(2);
+    expect(st.turns[0].active).toBe(false);
+    expect(st.turns[1]).toMatchObject({ lang: 'ko', active: true });
+  });
+
+  it('turnEnd finalizes that language’s turn; translation may still append after release', () => {
+    let st = s();
+    st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'en', text: 'a' });
+    st = conversationReducer(st, { type: 'turnEnd', lang: 'en' });
+    expect(st.turns[0].active).toBe(false);
+    st = conversationReducer(st, { type: 'delta', field: 'translation', lang: 'ko', text: '가' });
+    expect(st.turns[0].translation).toBe('가'); // late translation still lands on the turn
+    st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'en', text: 'b' });
+    expect(st.turns).toHaveLength(2);
+  });
+
+  it('direction: a second press while one is held is ignored; release clears', () => {
+    let st = s();
+    st = conversationReducer(st, { type: 'direction', from: 'en' });
+    st = conversationReducer(st, { type: 'direction', from: 'ko' });
+    expect(st.activeDirection).toBe('en');
+    st = conversationReducer(st, { type: 'direction', from: null });
+    expect(st.activeDirection).toBeNull();
+  });
+
+  it('status ready → live; status ended → ended + direction cleared', () => {
+    let st = s();
+    st = conversationReducer(st, { type: 'direction', from: 'en' });
+    st = conversationReducer(st, { type: 'status', state: 'ready' });
+    expect(st.phase).toBe('live');
+    expect(st.status).toBe('ready');
+    st = conversationReducer(st, { type: 'status', state: 'ended' });
+    expect(st.phase).toBe('ended');
+    expect(st.activeDirection).toBeNull();
+  });
+
+  it('reconnecting/reconnected preserve ended', () => {
+    let st = s();
+    st = conversationReducer(st, { type: 'status', state: 'ready' });
+    st = conversationReducer(st, { type: 'reconnecting' });
+    expect(st.status).toBe('reconnecting');
+    st = conversationReducer(st, { type: 'reconnected' });
+    expect(st.status).toBe('ready');
+    st = conversationReducer(st, { type: 'end' });
+    st = conversationReducer(st, { type: 'reconnecting' });
+    expect(st.status).toBe('ended');
+  });
+
+  it('pause/resume, config, error/clearError', () => {
+    let st = s();
+    st = conversationReducer(st, { type: 'pause' });
+    expect(st.paused).toBe(true);
+    st = conversationReducer(st, { type: 'resume' });
+    expect(st.paused).toBe(false);
+    st = conversationReducer(st, { type: 'config', config: { voiceOver: true, voiceClone: true } });
+    expect(st.config).toEqual({ voiceOver: true, voiceClone: true });
+    st = conversationReducer(st, { type: 'error', message: 'mic_blocked' });
+    expect(st.error).toBe('mic_blocked');
+    st = conversationReducer(st, { type: 'clearError' });
+    expect(st.error).toBeNull();
+  });
+});
