@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { EventEmitter } from 'events';
 import { createServer, type Server } from 'node:http';
 import { WebSocket } from 'ws';
@@ -75,11 +75,17 @@ describe('ConversationTransport', () => {
     const { httpServer, port, made } = await setup();
     try {
       const ws = new WebSocket(`ws://127.0.0.1:${port}${WS_CONVERSATION_PATH}`);
+      // Buffer frames up front: config + status can be delivered in the same
+      // event-loop turn, so a once-listener attached after the first await
+      // would miss the second frame.
+      const received: Record<string, unknown>[] = [];
+      ws.on('message', (d) => received.push(JSON.parse(d.toString()) as Record<string, unknown>));
       ws.on('open', () => ws.send(JSON.stringify({ type: 'start', languages: ['en', 'ko'], voiceOver: false, voiceClone: false })));
-      const first = await nextMessage(ws);
-      expect(first.type).toBe('config');
-      const second = await nextMessage(ws);
-      expect(second).toEqual({ type: 'status', state: 'ready' });
+      await vi.waitFor(() => {
+        expect(received).toHaveLength(2);
+      });
+      expect(received[0].type).toBe('config');
+      expect(received[1]).toEqual({ type: 'status', state: 'ready' });
 
       ws.send(JSON.stringify({ type: 'direction', from: 'ko' }));
       ws.send(Buffer.from([1, 2, 3]));

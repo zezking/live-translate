@@ -1,7 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 import { DuoSession, type SessionFactory } from './duo-session.js';
 import type { ConversationWsMessage } from '@v2/shared';
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 class StubSession extends EventEmitter {
   src: string;
