@@ -49,6 +49,14 @@ describe('SocketClient', () => {
     c.sendAudio(new ArrayBuffer(8));
     expect(ws.sent[0]).toBeInstanceOf(ArrayBuffer);
   });
+  it('sendJson sends a JSON string frame when open', () => {
+    let ws: any;
+    const c = new SocketClient({ url: 'wss://x', onMessage: () => {}, WebSocketCtor: (() => { return ws = fakeWs(); }) as any });
+    c.connect();
+    ws.readyState = 1;
+    c.sendJson({ type: 'direction', from: 'en' });
+    expect(ws.sent[0]).toBe(JSON.stringify({ type: 'direction', from: 'en' }));
+  });
   it('fires onOpen when the socket opens', () => {
     let opened = false;
     let ws: any;

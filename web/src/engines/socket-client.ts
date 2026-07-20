@@ -84,6 +84,13 @@ export class SocketClient {
     }
   }
 
+  /** Send a JSON text frame (control messages). Only sends when the socket is OPEN. */
+  sendJson(value: unknown): void {
+    if (this._ws && this._ws.readyState === 1 /* OPEN */) {
+      this._ws.send(JSON.stringify(value));
+    }
+  }
+
   /** Close the socket permanently. Fires `onCloseTerminal` (via the close event) and never reconnects. */
   close(): void {
     this._closed = true;
