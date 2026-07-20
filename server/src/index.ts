@@ -14,6 +14,7 @@ import { SessionManager } from './session-manager.js';
 import { QwenTranslationSession, type VoiceConfig } from './qwen-translation-session.js';
 import { AudioBroadcaster } from './audio-broadcaster.js';
 import { generateQRCode, getLocalIP } from './qr-generator.js';
+import { renderJoinPage } from './join-page.js';
 import { healthRouter } from './routes/health.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -149,6 +150,17 @@ app.get('/conversation', (_req, res) => {
       .status(503)
       .type('text/plain')
       .send('v2 conversation UI not built. Run `npm run build:v2`, or open the Vite dev server (npm run dev:web) at /conversation.');
+  }
+});
+
+// Scan-to-join: renders the conversation LAN URL as a QR. Open on any device
+// on the network (e.g. https://<lan-ip>:<port>/join) and scan with a phone so
+// the phone never has to type the URL.
+app.get('/join', async (_req, res) => {
+  try {
+    res.type('html').send(await renderJoinPage(PORT));
+  } catch {
+    res.status(500).type('text/plain').send('failed to render join page');
   }
 });
 
@@ -350,6 +362,7 @@ server.listen(PORT, '0.0.0.0', async () => {
   console.log(`  Admin:       ${scheme}://localhost:${PORT}/admin`);
   console.log(`  Attendee:    ${scheme}://${ip}:${PORT}`);
   console.log(`  Interpreter: ${scheme}://${ip}:${PORT}/interpreter`);
+  console.log(`  QR (scan):   ${scheme}://${ip}:${PORT}/join`);
   const providers = [apiKeys.gemini && 'gemini', apiKeys.qwen && 'qwen'].filter(Boolean).join(', ');
   console.log(`  Providers:   ${providers || 'none'}`);
   console.log(`  Press Ctrl+C to stop\n`);
