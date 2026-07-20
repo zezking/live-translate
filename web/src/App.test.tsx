@@ -7,4 +7,8 @@ describe('App', () => {
     const { getByText } = render(<MemoryRouter><App /></MemoryRouter>);
     expect(getByText('v2 web — route mounted')).toBeTruthy();
   });
+  it('/conversation renders the admin password step', () => {
+    const { getByText } = render(<MemoryRouter initialEntries={['/conversation']}><App /></MemoryRouter>);
+    expect(getByText(/Admin password/i)).toBeTruthy();
+  });
 });
