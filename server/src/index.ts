@@ -9,6 +9,7 @@ import { GoogleGenAI } from '@google/genai';
 import { env } from './env.js';
 import { UsbAudioSource } from './usb-audio-source.js';
 import { BrowserAudioSource, WS_ADMIN_INPUT_PATH } from './browser-audio-source.js';
+import { ConversationTransport, WS_CONVERSATION_PATH } from './conversation-transport.js';
 import { SessionManager } from './session-manager.js';
 import { QwenTranslationSession, type VoiceConfig } from './qwen-translation-session.js';
 import { AudioBroadcaster } from './audio-broadcaster.js';
@@ -43,12 +44,14 @@ const sessionManager = new SessionManager();
 const broadcaster = new AudioBroadcaster(server);
 const browserAudioSource = new BrowserAudioSource(server, ADMIN_PASSWORD);
 browserAudioSource.start();
+const conversationTransport = new ConversationTransport({ apiKey: apiKeys.qwen ?? '' });
 
 // --- manual WS-upgrade routing ------------------------------------------
 // ws v8 aborts non-matching paths, which destroys the socket before other WSS
 // instances can handle it. Capture the broadcaster's '/ws' listener(s), remove
 // all upgrade listeners, then re-add a single router that dispatches by path:
 //   /ws/admin-input -> BrowserAudioSource
+//   /ws/conversation -> ConversationTransport (single-device)
 //   everything else -> the previously-captured listeners (broadcaster /ws)
 const existingUpgradeListeners = server.listeners('upgrade').slice();
 server.removeAllListeners('upgrade');
@@ -56,6 +59,8 @@ server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
   const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
   if (pathname === WS_ADMIN_INPUT_PATH) {
     browserAudioSource.handleUpgrade(req, socket, head);
+  } else if (pathname === WS_CONVERSATION_PATH) {
+    conversationTransport.handleUpgrade(req, socket, head);
   } else {
     for (const listener of existingUpgradeListeners) {
       listener.call(server, req, socket, head);
@@ -219,6 +224,25 @@ app.get('/api/voices', (_req, res) => {
 app.get('/api/qrcode', requireAdmin, async (_req, res) => {
   const { url, dataUrl } = await generateQRCode(PORT);
   res.json({ url, dataUrl });
+});
+
+// --- conversation routes (single-device) --------------------------------
+app.post('/api/conversation/session', requireAdmin, (_req, res) => {
+  if (!apiKeys.qwen) {
+    res.status(400).json({ error: 'No Qwen API key configured (DASHSCOPE_API_KEY)' });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+app.post('/api/conversation/config', requireAdmin, async (req, res) => {
+  const { voiceOver, voiceClone } = (req.body ?? {}) as { voiceOver?: boolean; voiceClone?: boolean };
+  const applied = await conversationTransport.setConfig({ voiceOver, voiceClone });
+  if (!applied) {
+    res.status(404).json({ error: 'no live session' });
+    return;
+  }
+  res.json({ ok: true });
 });
 
 app.post('/api/start', requireAdmin, async (req, res) => {
