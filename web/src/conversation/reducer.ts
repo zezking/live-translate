@@ -37,14 +37,19 @@ export function conversationReducer(state: ConversationState, action: Action): C
     }
 
     case 'delta': {
+      // `text` is the turn field's CURRENT FULL value (a live snapshot), not an
+      // incremental delta. We REPLACE the field so a Qwen ASR/translation
+      // revision (e.g. "Hello, it is one." -> "Hello.") overwrites instead of
+      // concatenating, which would duplicate words in the river.
       const { field, lang, text } = action;
       const turns = state.turns;
       if (field === 'translation') {
-        // Joins the most recent turn of the OTHER language — including an
-        // already-finalized turn (translations may lag the release).
+        // Set on the most recent turn of the OTHER language (the source
+        // utterance) — including an already-finalized turn (translations may
+        // lag the release).
         for (let i = turns.length - 1; i >= 0; i--) {
           if (turns[i].lang !== lang) {
-            const updated: Turn = { ...turns[i], translation: turns[i].translation + text };
+            const updated: Turn = { ...turns[i], translation: text };
             return { ...state, turns: [...turns.slice(0, i), updated, ...turns.slice(i + 1)] };
           }
         }
@@ -52,7 +57,7 @@ export function conversationReducer(state: ConversationState, action: Action): C
       }
       const last = turns[turns.length - 1];
       if (last && last.lang === lang && last.active) {
-        const updated: Turn = { ...last, original: last.original + text };
+        const updated: Turn = { ...last, original: text };
         return { ...state, turns: [...turns.slice(0, -1), updated] };
       }
       const fresh: Turn = { id: `${lang}-${turns.length}`, lang, original: text, translation: '', active: true };

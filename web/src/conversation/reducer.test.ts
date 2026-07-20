@@ -4,15 +4,25 @@ import { conversationReducer, createInitialState } from './reducer.js';
 describe('conversationReducer (single-device)', () => {
   const s = () => createInitialState();
 
-  it('groups consecutive same-language original deltas into one active turn', () => {
+  it('replaces the active turn original with the latest full value (not append)', () => {
     let st = s();
-    st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'en', text: 'How ' });
-    st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'en', text: 'are you' });
+    st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'en', text: 'How' });
+    st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'en', text: 'How are you' });
     expect(st.turns).toHaveLength(1);
     expect(st.turns[0]).toMatchObject({ lang: 'en', original: 'How are you', active: true });
   });
 
-  it('translation deltas join the most recent turn of the OTHER language', () => {
+  it('a revision overwrites instead of duplicating', () => {
+    // Qwen revises: "Hello, it is one." -> "Hello." The river must show the
+    // revised value, NOT "Hello, it is one.Hello." (the old append bug).
+    let st = s();
+    st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'en', text: 'Hello, it is one.' });
+    st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'en', text: 'Hello.' });
+    expect(st.turns).toHaveLength(1);
+    expect(st.turns[0].original).toBe('Hello.');
+  });
+
+  it('translation sets the most recent turn of the OTHER language', () => {
     let st = s();
     st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'en', text: 'hello' });
     st = conversationReducer(st, { type: 'delta', field: 'translation', lang: 'ko', text: '안녕' });
@@ -29,7 +39,7 @@ describe('conversationReducer (single-device)', () => {
     expect(st.turns[1]).toMatchObject({ lang: 'ko', active: true });
   });
 
-  it('turnEnd finalizes that language’s turn; translation may still append after release', () => {
+  it('turnEnd finalizes that language’s turn; a late translation still lands on it', () => {
     let st = s();
     st = conversationReducer(st, { type: 'delta', field: 'original', lang: 'en', text: 'a' });
     st = conversationReducer(st, { type: 'turnEnd', lang: 'en' });

@@ -255,14 +255,15 @@ export class QwenTranslationSession extends EventEmitter {
 
       case 'conversation.item.input_audio_transcription.text': {
         // Live ASR partials arrive in `stash` (cumulative for the utterance);
-        // `text` is empty until finalize (verified against the live API). Read
-        // both: `text` carries any committed prefix, `stash` the running tail.
+        // `text` is empty until finalize (verified against the live API). Emit
+        // the FULL current value so the client can REPLACE (not append) — Qwen
+        // revises its hypothesis mid-utterance, and a diff/delta would
+        // concatenate the revision and duplicate words.
         const newText = (msg.text || '') + (msg.stash || '');
-        const delta = newText.startsWith(this._lastInputText)
-          ? newText.slice(this._lastInputText.length)
-          : newText;
-        this._lastInputText = newText;
-        if (delta) this.emit('inputTranscription', delta);
+        if (newText !== this._lastInputText) {
+          this._lastInputText = newText;
+          this.emit('inputTranscription', newText);
+        }
         break;
       }
       case 'conversation.item.input_audio_transcription.completed':
@@ -273,14 +274,13 @@ export class QwenTranslationSession extends EventEmitter {
       case 'response.text.text': {
         // Output text channel is modality-dependent and mutually exclusive:
         // audio sessions emit `response.audio_transcript.text`; text-only sessions
-        // emit `response.text.text`. Both are cumulative — diff against the last
-        // seen value and emit only the new suffix.
+        // emit `response.text.text`. Emit the FULL cumulative value (replace, not
+        // delta) for the same revision-dedup reason as input.
         const newText = msg.text || '';
-        const delta = newText.startsWith(this._lastOutputText)
-          ? newText.slice(this._lastOutputText.length)
-          : newText;
-        this._lastOutputText = newText;
-        if (delta) this.emit('outputTranscription', delta);
+        if (newText !== this._lastOutputText) {
+          this._lastOutputText = newText;
+          this.emit('outputTranscription', newText);
+        }
         break;
       }
       case 'response.audio_transcript.done':
