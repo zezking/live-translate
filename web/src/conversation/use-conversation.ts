@@ -6,12 +6,16 @@ import type { ConversationState } from './types.js';
 
 export interface UseConversationOptions {
   adminKey: string;
+  /** Called when a saved key fails auth mid-session (e.g. changed server-side). Clear it so the user can re-enter. */
+  onUnauthorized?: () => void;
 }
 
 export interface UseConversationApi {
   state: ConversationState;
   devices: MediaDeviceInfo[];
   selectedDeviceId: string;
+  /** Validate the admin password against the server without saving it. */
+  validateAdmin: (key: string) => Promise<boolean>;
   begin: (languages: [string, string]) => Promise<void>;
   press: (lang: string) => void;
   release: () => void;
@@ -29,7 +33,7 @@ function wsUrl(): string {
   return `${proto}//${window.location.host}/ws/conversation`;
 }
 
-export function useConversation({ adminKey }: UseConversationOptions): UseConversationApi {
+export function useConversation({ adminKey, onUnauthorized }: UseConversationOptions): UseConversationApi {
   const [state, dispatch] = useReducer(conversationReducer, undefined, createInitialState);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState('');
@@ -69,6 +73,19 @@ export function useConversation({ adminKey }: UseConversationOptions): UseConver
     }
   }, []);
 
+  // ---- validate admin password (without saving it) ----
+  const validateAdmin = useCallback(async (key: string): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/conversation/session', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}` },
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }, []);
+
   // ---- begin: validate admin, then connect + start ----
   const begin = useCallback(
     async (languages: [string, string]) => {
@@ -79,6 +96,8 @@ export function useConversation({ adminKey }: UseConversationOptions): UseConver
           headers: { Authorization: `Bearer ${adminKeyRef.current}` },
         });
         if (!res.ok) {
+          // Saved key is invalid — clear it so the user returns to the admin step.
+          onUnauthorized?.();
           dispatch({ type: 'error', message: 'unauthorized' });
           return;
         }
@@ -147,7 +166,7 @@ export function useConversation({ adminKey }: UseConversationOptions): UseConver
       socket.connect();
       await startMic(); // mic prompt fires during connect
     },
-    [ensurePlayback, startMic],
+    [ensurePlayback, startMic, onUnauthorized],
   );
 
   // ---- push-to-talk ----
@@ -211,7 +230,7 @@ export function useConversation({ adminKey }: UseConversationOptions): UseConver
 
   return {
     state, devices, selectedDeviceId,
-    begin, press, release,
+    validateAdmin, begin, press, release,
     setVoiceOver, setVoiceClone, setMicDevice,
     pause, resume, endConversation, clearError,
   };

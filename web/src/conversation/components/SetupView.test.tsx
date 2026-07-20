@@ -1,12 +1,22 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
+import { render, fireEvent, waitFor } from '@testing-library/react';
 import { SetupView } from './SetupView.js';
 import { I18nProvider } from '../i18n.js';
 
 const wrap = (ui: React.ReactNode) => <I18nProvider locale="en">{ui}</I18nProvider>;
 
 const setup = (props: Partial<React.ComponentProps<typeof SetupView>> = {}) =>
-  render(wrap(<SetupView adminKey="" onSetAdminKey={() => {}} onBegin={() => {}} {...props} />));
+  render(
+    wrap(
+      <SetupView
+        adminKey=""
+        onSetAdminKey={() => {}}
+        onValidateAdmin={() => Promise.resolve(true)}
+        onBegin={() => {}}
+        {...props}
+      />,
+    ),
+  );
 
 describe('SetupView', () => {
   it('without adminKey shows the admin step (no language pickers)', () => {
@@ -15,12 +25,24 @@ describe('SetupView', () => {
     expect(queryByRole('combobox')).toBeNull();
   });
 
-  it('admin Continue stores the key', () => {
+  it('admin Continue validates, then stores the key on success', async () => {
     const onSetAdminKey = vi.fn();
-    const { getByPlaceholderText, getByRole } = setup({ adminKey: '', onSetAdminKey });
+    const onValidateAdmin = vi.fn().mockResolvedValue(true);
+    const { getByPlaceholderText, getByRole } = setup({ adminKey: '', onSetAdminKey, onValidateAdmin });
     fireEvent.change(getByPlaceholderText(/Admin password/i), { target: { value: 'centrechurch' } });
     fireEvent.click(getByRole('button', { name: /Continue/i }));
-    expect(onSetAdminKey).toHaveBeenCalledWith('centrechurch');
+    await waitFor(() => expect(onSetAdminKey).toHaveBeenCalledWith('centrechurch'));
+    expect(onValidateAdmin).toHaveBeenCalledWith('centrechurch');
+  });
+
+  it('wrong password shows an inline error and does NOT store the key', async () => {
+    const onSetAdminKey = vi.fn();
+    const onValidateAdmin = vi.fn().mockResolvedValue(false);
+    const { getByPlaceholderText, getByRole, getByText } = setup({ adminKey: '', onSetAdminKey, onValidateAdmin });
+    fireEvent.change(getByPlaceholderText(/Admin password/i), { target: { value: 'nope' } });
+    fireEvent.click(getByRole('button', { name: /Continue/i }));
+    await waitFor(() => expect(getByText(/Wrong admin password/i)).toBeTruthy());
+    expect(onSetAdminKey).not.toHaveBeenCalled();
   });
 
   it('pair picker defaults to English ↔ Korean and Begin fires onBegin with the pair', () => {

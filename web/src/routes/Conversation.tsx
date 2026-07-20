@@ -12,8 +12,8 @@ import { ErrorLine } from '@/conversation/components/ErrorLine';
 import { pttLabel, colorFor } from '@/conversation/languages';
 
 function ConversationInner() {
-  const { adminKey, setAdminKey } = useAuth();
-  const conv = useConversation({ adminKey });
+  const { adminKey, setAdminKey, clear } = useAuth();
+  const conv = useConversation({ adminKey, onUnauthorized: clear });
   const { state } = conv;
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -28,7 +28,12 @@ function ConversationInner() {
       <div className="relative flex h-full flex-col bg-background">
         {state.phase === 'setup' || state.phase === 'connecting' ? (
           state.phase === 'setup' ? (
-            <SetupView adminKey={adminKey} onSetAdminKey={setAdminKey} onBegin={(langs) => void conv.begin(langs)} />
+            <SetupView
+              adminKey={adminKey}
+              onSetAdminKey={setAdminKey}
+              onValidateAdmin={conv.validateAdmin}
+              onBegin={(langs) => void conv.begin(langs)}
+            />
           ) : (
             <main className="flex h-full items-center justify-center text-sm text-muted-foreground">Connecting…</main>
           )
