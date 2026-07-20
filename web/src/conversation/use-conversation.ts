@@ -88,7 +88,15 @@ export function useConversation({ adminKey }: UseConversationOptions): UseConver
       }
       dispatch({ type: 'setLanguages', languages });
       dispatch({ type: 'setPhase', phase: 'connecting' });
-      await ensurePlayback(); // unlock audio on the Begin gesture
+      try {
+        await ensurePlayback(); // unlock audio on the Begin gesture
+      } catch {
+        // AudioContext blocked (autoplay policy / mic permission) — surface a
+        // mic_blocked error and abort before connecting. Without this, phase
+        // stays 'connecting' with no recovery path.
+        dispatch({ type: 'error', message: 'mic_blocked' });
+        return;
+      }
 
       socketRef.current?.close();
       const socket = new SocketClient({
@@ -125,7 +133,14 @@ export function useConversation({ adminKey }: UseConversationOptions): UseConver
           });
           dispatch({ type: 'reconnected' });
         },
-        onReconnecting: () => dispatch({ type: 'reconnecting' }),
+        onReconnecting: () => {
+          dispatch({ type: 'reconnecting' });
+          // Clear any held PTT direction: the server drops direction on
+          // reconnect (the re-sent start frame carries none), so audio would
+          // be silently dropped until the next press. The user re-presses to
+          // resume — safe and simple.
+          dispatch({ type: 'direction', from: null });
+        },
         onCloseTerminal: () => dispatch({ type: 'end' }),
       });
       socketRef.current = socket;

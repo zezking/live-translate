@@ -192,6 +192,7 @@ export class QwenTranslationSession extends EventEmitter {
         this.emit('closed', {
           languageCode: this.languageCode,
           reason: reason.toString(),
+          code,
         });
       });
     });

@@ -131,6 +131,65 @@ describe('DuoSession', () => {
     expect(made).toHaveLength(3); // direction 1 replaced
   });
 
+  it('does not reconnect on close code 1008 with empty reason', async () => {
+    const { session, made } = make();
+    await session.start();
+    // Qwen sometimes closes with code 1008 and an empty reason — the regex
+    // alone would miss it, so the close code must be checked directly.
+    made[0].emit('closed', { code: 1008, reason: '' });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(made).toHaveLength(2); // no reconnect scheduled
+  });
+
+  it('escalates reconnect delay on persistent connect failure', async () => {
+    vi.useFakeTimers();
+    let callCount = 0;
+    const made: StubSession[] = [];
+    const factory: SessionFactory = (src, tgt) => {
+      callCount += 1;
+      const s = new StubSession(src, tgt);
+      // The two sessions created by start() connect normally; every subsequent
+      // (reconnect) session fails to connect, simulating a persistent outage.
+      if (callCount > 2) {
+        s.connect = async () => {
+          throw new Error('boom');
+        };
+      }
+      made.push(s);
+      return s as never;
+    };
+    const session = new DuoSession({
+      apiKey: 'key',
+      languages: ['en', 'ko'],
+      sessionFactory: factory,
+      reconnectBaseDelay: 1000,
+    });
+    const sent: ConversationWsMessage[] = [];
+    session.attach({ send: (m) => sent.push(m) });
+    // _replaceSession emits 'error' on connect failure; swallow it so Node's
+    // EventEmitter doesn't treat it as unhandled.
+    session.on('error', () => {});
+    await session.start();
+    expect(made).toHaveLength(2);
+
+    // Direction 0 closes → first reconnect at base delay 1000ms.
+    made[0].emit('closed', { reason: 'network blip' });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(made).toHaveLength(3); // replacement created; connect() rejected
+
+    // Simulate the failed-connect WS close (as Qwen emits) → next reconnect.
+    made[2].emit('closed', { reason: 'still down' });
+
+    // Backoff should have escalated to 2000ms, so advancing just past the
+    // original 1000ms base delay must NOT yet fire the second reconnect.
+    await vi.advanceTimersByTimeAsync(1001);
+    expect(made).toHaveLength(3);
+
+    // Advancing the rest of the escalated window (total 2000ms) fires it.
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(made).toHaveLength(4);
+  });
+
   it('stop sends status ended and disconnects both', async () => {
     const { session, made, sent } = make();
     await session.start();

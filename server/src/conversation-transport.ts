@@ -134,6 +134,10 @@ export class ConversationTransport {
           if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'status', state: 'ready' }));
         })
         .catch((err: unknown) => {
+          // start() failed: clear _live so REST setConfig returns false (404)
+          // rather than ok:true against a never-connected session. The socket
+          // is left open so the error frame reaches the client.
+          this._live = null;
           if (ws.readyState === 1)
             ws.send(JSON.stringify({ type: 'error', message: (err as Error)?.message ?? String(err) }));
         });

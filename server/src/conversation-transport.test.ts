@@ -114,4 +114,40 @@ describe('ConversationTransport', () => {
       await teardown(httpServer);
     }
   });
+
+  it('setConfig returns false after a failed session.start()', async () => {
+    // Variant factory: every session rejects connect() → DuoSession.start() rejects.
+    const made: StubSession[] = [];
+    const factory: SessionFactory = (src) => {
+      const s = new StubSession();
+      s.src = src;
+      s.connect = async () => {
+        throw new Error('connect failed');
+      };
+      made.push(s);
+      return s as never;
+    };
+    const httpServer = createServer();
+    const transport = new ConversationTransport({ apiKey: 'key', sessionFactory: factory, startTimeoutMs: 100 });
+    httpServer.on('upgrade', (req, socket, head) => transport.handleUpgrade(req, socket, head));
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
+    const port = (httpServer.address() as { port: number }).port;
+    try {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}${WS_CONVERSATION_PATH}`);
+      const received: Record<string, unknown>[] = [];
+      ws.on('message', (d) => received.push(JSON.parse(d.toString()) as Record<string, unknown>));
+      ws.on('open', () => ws.send(JSON.stringify({ type: 'start', languages: ['en', 'ko'], voiceOver: false, voiceClone: false })));
+      // Wait for the error frame that signals start() rejected.
+      await vi.waitFor(() => {
+        expect(received.some((m) => m.type === 'error')).toBe(true);
+      });
+      // The socket stays open; the live session is cleared so REST config 404s.
+      expect(ws.readyState).toBe(WebSocket.OPEN);
+      const ok = await transport.setConfig({ voiceOver: true });
+      expect(ok).toBe(false);
+      ws.close();
+    } finally {
+      await teardown(httpServer);
+    }
+  });
 });

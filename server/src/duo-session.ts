@@ -32,6 +32,7 @@ export interface DuoSessionOptions {
 /** Payload emitted with the `closed` event from a translation session. */
 export interface SessionClosedInfo {
   reason?: string;
+  code?: number;
 }
 
 /**
@@ -188,13 +189,19 @@ export class DuoSession extends EventEmitter {
         direction: this._languages[i],
         error: err instanceof Error ? err.message : String(err),
       });
+      // Propagate so _reconnectDirection's .then (which resets the attempt
+      // counter) only runs on confirmed connect success — otherwise backoff
+      // would never escalate past the base delay on persistent failure.
+      throw err;
     }
   }
 
   private _reconnectDirection(i: 0 | 1, info: SessionClosedInfo = {}): void {
     if (this._reconnecting[i] || !this._started) return;
     const reason = info.reason || '';
-    if (/unauthorized|1008/i.test(reason)) return; // don't reconnect auth errors
+    // Don't reconnect terminal auth/close errors. The WS close code is checked
+    // directly because Qwen sometimes closes with code 1008 and an empty reason.
+    if (info.code === 1008 || /unauthorized|1008/i.test(reason)) return;
     this._reconnecting[i] = true;
     const attempts = this._reconnectAttempts[i] + 1;
     this._reconnectAttempts[i] = attempts;
@@ -209,12 +216,10 @@ export class DuoSession extends EventEmitter {
         .then(() => {
           this._reconnectAttempts[i] = 0;
         })
-        .catch((err: unknown) =>
-          this.emit('error', {
-            direction: this._languages[i],
-            error: err instanceof Error ? err.message : String(err),
-          }),
-        );
+        .catch(() => {
+          // Error already emitted by _replaceSession; the attempt counter is
+          // intentionally left untouched so backoff escalates on the next try.
+        });
     }, delay);
   }
 }
