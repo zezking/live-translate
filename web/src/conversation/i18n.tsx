@@ -1,5 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import type { Locale } from './types.js';
+
+export type Locale = 'en' | 'ko';
 
 /** en/ko string table. Ported from v1 public/i18n.js + warm-state copy from the design spec. */
 export const STRINGS = {

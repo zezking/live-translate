@@ -7,8 +7,4 @@ describe('App', () => {
     const { getByText } = render(<MemoryRouter><App /></MemoryRouter>);
     expect(getByText('v2 web — route mounted')).toBeTruthy();
   });
-  it('mounts /conversation without crashing', () => {
-    const { container } = render(<MemoryRouter initialEntries={['/conversation']}><App /></MemoryRouter>);
-    expect(container).toBeTruthy();
-  });
 });

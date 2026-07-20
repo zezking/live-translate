@@ -1,8 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 import { ErrorLine } from './ErrorLine.js';
-import { I18nProvider } from '../i18n.js';
-import type { Locale } from '../types.js';
+import { I18nProvider, type Locale } from '../i18n.js';
 
 const wrap = (ui: React.ReactNode, locale: Locale = 'en') => <I18nProvider locale={locale}>{ui}</I18nProvider>;
 
