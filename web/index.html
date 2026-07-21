@@ -1,5 +1,47 @@
 <!DOCTYPE html>
 <html lang="en">
   <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>v2</title></head>
-  <body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>
+  <body>
+    <div id="root"></div>
+    <script>
+      // Pre-bundle diagnostics: React's error boundary can't catch load/parse
+      // failures (those happen before React mounts), so a broken bundle shows
+      // a blank page with no clue. Surface those here.
+      (function () {
+        function show(label, detail) {
+          var pre = document.getElementById('__diag');
+          if (!pre) {
+            pre = document.createElement('pre');
+            pre.id = '__diag';
+            pre.style.cssText =
+              'position:fixed;top:0;left:0;right:0;margin:0;padding:16px;' +
+              'font:12px ui-monospace,SFMono-Regular,Menlo,monospace;' +
+              'background:#faf9f7;color:#c0623a;white-space:pre-wrap;' +
+              'word-break:break-word;z-index:99999;box-sizing:border-box';
+            document.body.appendChild(pre);
+          }
+          pre.textContent = label + '\n\n' + (detail || '');
+        }
+        window.addEventListener('error', function (e) {
+          show('Page error: ' + (e.message || '(unknown)'),
+            (e.filename ? 'file: ' + e.filename + ':' + e.lineno + '\n' : '') +
+            (e.error && e.error.stack ? e.error.stack : ''));
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          show('Unhandled rejection:',
+            (e.reason && e.reason.message) || String(e.reason || ''));
+        });
+        // If React hasn't populated #root within 8s, the bundle didn't load/run.
+        setTimeout(function () {
+          var r = document.getElementById('root');
+          if (!r || r.children.length === 0) {
+            show('App did not start',
+              'The JS bundle did not load or run (likely a stale cached file ' +
+              'or a blocked request). Clear the site data / hard-refresh and retry.');
+          }
+        }, 8000);
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
