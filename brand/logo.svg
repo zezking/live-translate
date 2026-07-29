@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Live Translate">
+  <defs>
+    <!-- Premium azure → indigo gradient. Reads as voice / communication. -->
+    <linearGradient id="cc-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"    stop-color="#4FA8F5"/>
+      <stop offset="0.52" stop-color="#3D63E0"/>
+      <stop offset="1"    stop-color="#3830A4"/>
+    </linearGradient>
+    <!-- Soft top gloss for depth (Apple-style). -->
+    <linearGradient id="cc-gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#ffffff" stop-opacity="0.30"/>
+      <stop offset="0.46" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Die-cut glyph: white speech bubble with waveform knocked out. -->
+    <mask id="cc-glyph">
+      <rect width="1024" height="1024" fill="black"/>
+      <path fill="white" d="M364,300 H660 A80,80 0 0 1 740,380 V588 A80,80 0 0 1 660,668 H500 L455,748 L410,668 H364 A80,80 0 0 1 284,588 V380 A80,80 0 0 1 364,300 Z"/>
+      <g fill="black">
+        <rect x="388" y="460"   width="40" height="120" rx="20"/>
+        <rect x="440" y="427.5" width="40" height="185" rx="20"/>
+        <rect x="492" y="395"   width="40" height="250" rx="20"/>
+        <rect x="544" y="427.5" width="40" height="185" rx="20"/>
+        <rect x="596" y="460"   width="40" height="120" rx="20"/>
+      </g>
+    </mask>
+  </defs>
+
+  <!-- macOS-style squircle background (corner ≈ 22.3%). -->
+  <rect width="1024" height="1024" rx="228" fill="url(#cc-bg)"/>
+  <rect width="1024" height="1024" rx="228" fill="url(#cc-gloss)"/>
+
+  <!-- White bubble; waveform bars show the gradient through the cut-outs. -->
+  <rect width="1024" height="1024" fill="#ffffff" mask="url(#cc-glyph)"/>
+</svg>

@@ -12,7 +12,7 @@ Let the admin pick where translation audio comes from. Three sources:
 2. **Browser** — audio playing in a specific browser tab (e.g. a YouTube tab being shared)
 3. **System** — full macOS audio loopback (any app's output)
 
-Primary use cases are quick testing with pre-recorded YouTube sermons and demoing the app without the booth hardware. Production service stays on USB.
+Primary use cases are quick testing with pre-recorded YouTube speeches and demoing the app without the booth hardware. Production service stays on USB.
 
 ## Architecture
 

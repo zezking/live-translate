@@ -5,7 +5,7 @@
 
 ## Problem
 
-Center Church currently uses a human interpreter + ListenWiFi setup for live sermon translation. Attendees connect to a dedicated WiFi network and listen to a human interpreter who translates the sermon in real-time. This is labor-intensive, limited to one language at a time, and depends on interpreter availability.
+Live Translate currently uses a human interpreter + ListenWiFi setup for live speech translation. Attendees connect to a dedicated WiFi network and listen to a human interpreter who translates the speech in real-time. This is labor-intensive, limited to one language at a time, and depends on interpreter availability.
 
 ## Solution
 
@@ -134,7 +134,7 @@ Served on the MacBook. The operator (a volunteer) uses this during the service.
 
 Features:
 - **Start** — begins audio capture and starts streaming to Gemini API
-- **Pause** — mutes translation during worship/music (safety net; model also filters background music automatically)
+- **Pause** — mutes translation during music (safety net; model also filters background music automatically)
 - **Resume** — resumes translation
 - **Stop** — ends the session
 - Language selector — checkboxes for which languages to translate
@@ -188,8 +188,8 @@ Yearly (52 services): ~$458
 4. Confirm audio level meter shows input
 5. Select languages for today's service
 6. Display QR code on screen or print signs for attendees
-7. Hit **Start** when sermon begins
-8. Hit **Pause** during worship songs
+7. Hit **Start** when speech begins
+8. Hit **Pause** during songs
 9. Hit **Resume** when speaking resumes
 10. Hit **Stop** at end of service
 
@@ -230,7 +230,7 @@ Two modes supported — same codebase:
 
 ### Design Principles
 
-Inspired by [Centre Church's website](https://centrechurch.ca/) — clean, modern, minimal. Classic black and white with strong typography. No unnecessary decoration.
+Inspired by [Live Translate's website](https://changeme.ca/) — clean, modern, minimal. Classic black and white with strong typography. No unnecessary decoration.
 
 **Design language:**
 - **Colors:** Black (#000), White (#FFF), subtle grays (#F5F5F5, #E0E0E0, #999)
@@ -244,7 +244,7 @@ Inspired by [Centre Church's website](https://centrechurch.ca/) — clean, moder
 ```
 ┌─────────────────────────────────┐
 │                                 │
-│        CENTRE CHURCH            │
+│        LIVE TRANSLATE            │
 │      Live Translation           │
 │                                 │
 │  ─────────────────────────────  │
@@ -268,7 +268,7 @@ Inspired by [Centre Church's website](https://centrechurch.ca/) — clean, moder
 │  └─────────────────────────┘    │
 │                                 │
 │  ─────────────────────────────  │
-│       Centre Church 2025        │
+│       Live Translate 2025        │
 │                                 │
 └─────────────────────────────────┘
 ```
@@ -293,7 +293,7 @@ Inspired by [Centre Church's website](https://centrechurch.ca/) — clean, moder
 │  [ ← Change Language ]          │
 │                                 │
 │  ─────────────────────────────  │
-│       Centre Church 2025        │
+│       Live Translate 2025        │
 │                                 │
 └─────────────────────────────────┘
 ```
@@ -307,7 +307,7 @@ Inspired by [Centre Church's website](https://centrechurch.ca/) — clean, moder
 - Play/Pause button: simple outlined circle with icon
 - Volume slider: thin black track
 - "Change Language" link: small text at bottom
-- Footer: subtle gray text "Centre Church 2025"
+- Footer: subtle gray text "Live Translate 2025"
 - Auto-reconnect indicator shown briefly if connection drops: "Reconnecting..." in gray
 
 ### Operator Control Panel (`localhost:3000/admin`)
@@ -315,7 +315,7 @@ Inspired by [Centre Church's website](https://centrechurch.ca/) — clean, moder
 ```
 ┌──────────────────────────────────────────────────────────┐
 │                                                          │
-│  CENTRE CHURCH — Live Translation Control    [⚙ Setup]   │
+│  LIVE TRANSLATE — Live Translation Control    [⚙ Setup]   │
 │  ═══════════════════════════════════════════════════════  │
 │                                                          │
 │  Status: ● Ready                                         │
@@ -345,7 +345,7 @@ Inspired by [Centre Church's website](https://centrechurch.ca/) — clean, moder
 │  └─────────────────────────────┘                          │
 │                                                          │
 │  ─────────────────────────────────────────────────────── │
-│       Centre Church 2025                                 │
+│       Live Translate 2025                                 │
 │                                                          │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -399,5 +399,5 @@ Inspired by [Centre Church's website](https://centrechurch.ca/) — clean, moder
 - Bidirectional translation
 - Remote/online attendee streaming
 - Recording/archiving translated audio
-- Worship music auto-detection
+- Music auto-detection
 - Native mobile app

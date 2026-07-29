@@ -1,6 +1,6 @@
-# Live Sermon Translation
+# Live Translate
 
-AI-powered real-time translation for live events, worship services, and meetings. Streams translated audio to attendees' phones via a web browser — no app install required.
+AI-powered real-time translation for live events, services, and meetings. Streams translated audio to attendees' phones via a web browser — no app install required.
 
 ## Hardware Setup
 

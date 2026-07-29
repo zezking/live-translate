@@ -22,7 +22,7 @@ export interface PlaybackEngineOptions {
  *   `sampleRate`, and schedules it gaplessly via `nextPlayTime`.
  * - `stopAll()` stops every active source and resets `nextPlayTime`.
  *
- * No React; safe to use from the conversation page (Plan 5) and the church attendee.
+ * No React; safe to use from the conversation page (Plan 5) and the attendee client.
  */
 export class PlaybackEngine {
   private readonly _AudioContextCtor: typeof AudioContext | undefined;

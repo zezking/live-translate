@@ -599,13 +599,13 @@
     const win = window.open('', '_blank');
     win.document.write(`
       <html>
-        <head><title>QR Code — Centre Church Live Translation</title>
+        <head><title>QR Code — Live Translate</title>
         <style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;}</style>
         </head>
         <body>
           <img src="${qrImage.src}" style="width:400px;height:400px;">
           <p style="margin-top:24px;font-size:24px;">${url}</p>
-          <p style="margin-top:8px;color:#999;">Centre Church — Live Translation</p>
+          <p style="margin-top:8px;color:#999;">Live Translate — Live Translation</p>
         </body>
       </html>
     `);

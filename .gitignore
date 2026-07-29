@@ -11,3 +11,12 @@ dist/
 /server/dist/
 
 .superpowers/
+
+# Local TLS dev certs (secrets)
+cert/
+
+# Agent / skill tooling & generated artifacts
+.lavish/
+.agents/
+.claude/
+skills-lock.json

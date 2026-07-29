@@ -1,6 +1,6 @@
-# Center Church Live Translation
+# Live Translate
 
-AI-powered real-time sermon/conversation translation for Center Church. The repo holds two generations of the app:
+AI-powered real-time speech/conversation translation. The repo holds two generations of the app:
 
 - **v1** (production, do not touch during v2 work): root `src/server.js` (Express + Gemini Live), `public/` (vanilla JS frontend), `test/` (node:test). Root `package.json` scripts belong to v1 unless prefixed.
 - **v2** (active rewrite, all new code): npm workspaces — `shared/` (`@v2/shared` message types, raw TS consumed via workspace symlink), `server/` (Express + TS, port 4000), `web/` (React 18 + TS strict + Vite + Tailwind v4 SPA).
@@ -29,7 +29,7 @@ npm run dev               # v1 server with --watch
 - **Do not modify v1** (`src/`, `public/`, `test/`, root `package.json`, `src/server.js`) while on v2 feature branches. New v2 code lives under `web/src/`, `server/src/`, `shared/src/`.
 - **TypeScript strict** everywhere in v2; no `any` without a `// reason` comment. Local relative imports in `web/` use `.js` extensions. `@/*` aliases `web/src/*`.
 - **Commit style:** `feat(v2): <summary>` for v2 work (see git log for variants like `fix(v2):`, `docs(v2):`).
-- v2 host admin password defaults to `centrechurch` (env `ADMIN_PASSWORD`).
+- v2 host admin password defaults to `changeme` (env `ADMIN_PASSWORD`).
 
 ## v2 architecture (conversation surface)
 

@@ -95,7 +95,7 @@ scripts/duo-e2e-probe.mjs                    (NEW: live-API E2E probe — Task 1
 - Keep: `web/src/conversation/i18n.ts` (updated Task 5), `web/src/conversation/components/BottomSheet.tsx`, `web/src/conversation/components/ErrorLine.tsx` (+ its test), `web/src/auth/`
 - Modify: `web/src/App.tsx`, `web/src/App.test.tsx`
 
-- [ ] **Step 1: Replace the conversation types** in `shared/src/index.ts`. Delete `Role`, `RoomInfoMessage`, `StatusMessage`, `DeltaMessage`, `TurnEndMessage` (old shapes), `CreateRoomRequest`, `CreateRoomResponse`, `UpdateConfigRequest`, `EndRoomRequest`; keep `ConfigMessage`, `AudioMessage`, `ChurchWsMessage`, `TranscriptionMessage`. Add:
+- [ ] **Step 1: Replace the conversation types** in `shared/src/index.ts`. Delete `Role`, `RoomInfoMessage`, `StatusMessage`, `DeltaMessage`, `TurnEndMessage` (old shapes), `CreateRoomRequest`, `CreateRoomResponse`, `UpdateConfigRequest`, `EndRoomRequest`; keep `ConfigMessage`, `AudioMessage`, `TranslationWsMessage`, `TranscriptionMessage`. Add:
 
 ```ts
 // ---- Conversation (single-device push-to-talk) WS protocol ----
@@ -1319,9 +1319,9 @@ describe('SetupView', () => {
   it('admin Continue stores the key', () => {
     const onSetAdminKey = vi.fn();
     const { getByPlaceholderText, getByRole } = setup({ adminKey: '', onSetAdminKey });
-    fireEvent.change(getByPlaceholderText(/Admin password/i), { target: { value: 'centrechurch' } });
+    fireEvent.change(getByPlaceholderText(/Admin password/i), { target: { value: 'changeme' } });
     fireEvent.click(getByRole('button', { name: /Continue/i }));
-    expect(onSetAdminKey).toHaveBeenCalledWith('centrechurch');
+    expect(onSetAdminKey).toHaveBeenCalledWith('changeme');
   });
 
   it('pair picker defaults to English ↔ Korean and Begin fires onBegin with the pair', () => {

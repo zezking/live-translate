@@ -22,7 +22,7 @@
 
 From `shared/src/index.ts` + `server/src/index.ts` + `server/src/conversation-*.ts` (read verbatim during planning):
 
-- **REST (host/admin):** `POST /api/conversation/create` `[Authorization: Bearer <ADMIN_PASSWORD>]` body `{ hostName?, partnerName?, voiceOver?, voiceClone? }` → `{ roomId, hostToken, joinToken, joinUrl, qrDataUrl }`. `POST /api/conversation/config` `[Bearer]` body `{ roomId, voiceOver?, voiceClone? }` → `{ ok:true }`. `POST /api/conversation/end` `[Bearer]` body `{ roomId }` → `{ ok:true }`. `ADMIN_PASSWORD` defaults to `centrechurch` (env `ADMIN_PASSWORD`).
+- **REST (host/admin):** `POST /api/conversation/create` `[Authorization: Bearer <ADMIN_PASSWORD>]` body `{ hostName?, partnerName?, voiceOver?, voiceClone? }` → `{ roomId, hostToken, joinToken, joinUrl, qrDataUrl }`. `POST /api/conversation/config` `[Bearer]` body `{ roomId, voiceOver?, voiceClone? }` → `{ ok:true }`. `POST /api/conversation/end` `[Bearer]` body `{ roomId }` → `{ ok:true }`. `ADMIN_PASSWORD` defaults to `changeme` (env `ADMIN_PASSWORD`).
 - **WS:** `wss://<host>/ws/conversation?token=<hostToken|joinToken>`. Client→server = **binary 16-bit PCM frames only** (any text/JSON frame is silently dropped — there are NO client→server JSON control messages). Server→client = JSON `ConversationWsMessage`, one per text frame. On `attachParticipant` the server immediately sends `roomInfo` → `config` → `status`, in order. Close code **1008** = unauthorized / room-gone (terminal — do not reconnect).
 - **Down message shapes:** `roomInfo { type:'roomInfo'; names:{host,joiner} }`; `config { type:'config'; voiceOver; voiceClone }`; `status { type:'status'; state:'waiting'|'listening'|'paused'|'ended'; host:boolean; joiner:boolean }` (the server only ever emits `waiting`/`listening`/`ended` — **`paused` is never emitted**, so Pause is purely client-side); `delta { type:'delta'; speaker:Role; field:'original'|'translation'; text }`; `turnEnd { type:'turnEnd'; speaker:Role }`; `audio { type:'audio'; data:string }` (base64 24kHz PCM).
 - **`delta` routing (defines the river):** `original` is sent to **both** roles (`speaker` = the role who spoke); `translation` is sent to the **other** role **only** (the speaker never receives their own translation); `audio` is sent to the **other** role **only**, and only when `voiceOver`. Therefore on this device: **own turn** (speaker === my role) has only `original` → render it as the main line, no subtitle; **partner's turn** has both `original` + `translation` → main = `translation`, grey subtitle = `original`. (Matches the design spec + the v1 `renderBubble` rule `translation || original`.)
@@ -1291,11 +1291,11 @@ const setup = (props: Partial<React.ComponentProps<typeof OnboardingView>> = {})
 describe('OnboardingView', () => {
   it('host setup: Begin calls onBegin with names + adminKey', () => {
     const onBegin = vi.fn();
-    const { getByPlaceholderText, getByRole } = setup({ adminKey: 'centrechurch', onBegin });
+    const { getByPlaceholderText, getByRole } = setup({ adminKey: 'changeme', onBegin });
     fireEvent.change(getByPlaceholderText(/Enze/), { target: { value: 'Enze' } });
     fireEvent.change(getByPlaceholderText(/아버님/), { target: { value: '아버님' } });
     fireEvent.click(getByRole('button', { name: /Begin/i }));
-    expect(onBegin).toHaveBeenCalledWith('Enze', '아버님', 'centrechurch');
+    expect(onBegin).toHaveBeenCalledWith('Enze', '아버님', 'changeme');
   });
   it('host setup without adminKey: shows admin-password step first', () => {
     const { getByText, queryByRole } = setup({ adminKey: '' });
@@ -1604,7 +1604,7 @@ So the joiner's scanned QR (`https://<lan-ip>:4000/conversation?token=…`) reso
 
 - [ ] **Step 3: v1 untouched** — `git diff --stat main -- src/ public/ test/` → empty. `npm test` (v1, 5/5) green. The only files outside `web/` touched are `server/src/index.ts` (Task 11).
 
-- [ ] **Step 4: Manual browser check (two-device / two-tab).** Start `npm run dev:server` (:4000) and `npm run dev:web` (:5173). On the host, open `https://localhost:5173/conversation`, enter the admin password (`centrechurch` unless `ADMIN_PASSWORD` is set) + names, tap **Begin** → see the QR + "Waiting…". On a second tab/device open `https://localhost:5173/conversation?token=<joinToken>` (copy `joinToken` from the create response in the server log, or scan the QR after `build:v2` against :4000), tap **참여하기** → both enter the live river. Verify: flowing river (host terracotta / joiner green labels, partner turn shows translation as main + original as subtitle), active-speaker emphasis on the current turn, `● Listening…` status line, ⋯ sheet (voice-over/clone host-only; mic picker; pause/resume; end), warm state copy on partner away / pause / end, and that toggling voice-over reconnects (config broadcast). Confirm cleanup (close tab → no console errors; mic indicator stops).
+- [ ] **Step 4: Manual browser check (two-device / two-tab).** Start `npm run dev:server` (:4000) and `npm run dev:web` (:5173). On the host, open `https://localhost:5173/conversation`, enter the admin password (`changeme` unless `ADMIN_PASSWORD` is set) + names, tap **Begin** → see the QR + "Waiting…". On a second tab/device open `https://localhost:5173/conversation?token=<joinToken>` (copy `joinToken` from the create response in the server log, or scan the QR after `build:v2` against :4000), tap **참여하기** → both enter the live river. Verify: flowing river (host terracotta / joiner green labels, partner turn shows translation as main + original as subtitle), active-speaker emphasis on the current turn, `● Listening…` status line, ⋯ sheet (voice-over/clone host-only; mic picker; pause/resume; end), warm state copy on partner away / pause / end, and that toggling voice-over reconnects (config broadcast). Confirm cleanup (close tab → no console errors; mic indicator stops).
 
 - [ ] **Step 5: Commit any backfill; final `git log --oneline main..HEAD`.**
 

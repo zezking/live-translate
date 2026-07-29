@@ -19,7 +19,7 @@ const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY;
 
 export const env = {
   PORT: Number(process.env.V2_PORT ?? 4000),
-  ADMIN_PASSWORD: process.env.ADMIN_PASSWORD ?? 'centrechurch',
+  ADMIN_PASSWORD: process.env.ADMIN_PASSWORD ?? 'changeme',
   CERT_DIR: process.env.CERT_DIR ?? new URL('../../cert/', import.meta.url).pathname,
   GEMINI_API_KEY,
   DASHSCOPE_API_KEY,

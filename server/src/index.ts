@@ -358,7 +358,7 @@ app.get('/api/audio-level', requireAdmin, (req, res) => {
 server.listen(PORT, '0.0.0.0', async () => {
   const ip = await getLocalIP();
   const scheme = useTls ? 'https' : 'http';
-  console.log(`\n  Centre Church Live Translation (v2)`);
+  console.log(`\n  Live Translate (v2)`);
   console.log(`  Admin:       ${scheme}://localhost:${PORT}/admin`);
   console.log(`  Attendee:    ${scheme}://${ip}:${PORT}`);
   console.log(`  Interpreter: ${scheme}://${ip}:${PORT}/interpreter`);

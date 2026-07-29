@@ -4,7 +4,7 @@ export interface ConfigMessage { type: 'config'; voiceOver: boolean; voiceClone:
 export interface AudioMessage { type: 'audio'; data: string } // base64 24kHz PCM
 
 export interface TranscriptionMessage { type: 'transcription'; languageCode: string; transcriptionType: 'input' | 'output'; text: string }
-export type ChurchWsMessage = TranscriptionMessage | { type: 'audio'; languageCode: string; data: string } | { type: 'status'; state: string };
+export type TranslationWsMessage = TranscriptionMessage | { type: 'audio'; languageCode: string; data: string } | { type: 'status'; state: string };
 
 // ---- Conversation (single-device push-to-talk) WS protocol ----
 // Client -> server control frames (JSON text frames; audio is raw binary PCM):

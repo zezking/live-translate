@@ -235,7 +235,7 @@ git commit -m "feat(v2): monorepo workspaces scaffold (web/server/shared)"
 - Create: `shared/src/index.ts`
 
 **Interfaces:**
-- Produces: `@v2/shared` exports `ConversationWsMessage` (union), `ChurchWsMessage` (union), and REST request/response types (`CreateRoomRequest`, `CreateRoomResponse`, `UpdateConfigRequest`, `EndRoomRequest`). Consumed by Tasks 3, 6, and later plans.
+- Produces: `@v2/shared` exports `ConversationWsMessage` (union), `TranslationWsMessage` (union), and REST request/response types (`CreateRoomRequest`, `CreateRoomResponse`, `UpdateConfigRequest`, `EndRoomRequest`). Consumed by Tasks 3, 6, and later plans.
 
 - [ ] **Step 1: Write the contract types**
 
@@ -257,7 +257,7 @@ export type ConversationWsMessage =
   | DeltaMessage | TurnEndMessage | AudioMessage;
 
 export interface TranscriptionMessage { type: 'transcription'; languageCode: string; transcriptionType: 'input' | 'output'; text: string }
-export type ChurchWsMessage = TranscriptionMessage | { type: 'audio'; languageCode: string; data: string } | { type: 'status'; state: string };
+export type TranslationWsMessage = TranscriptionMessage | { type: 'audio'; languageCode: string; data: string } | { type: 'status'; state: string };
 
 // ---- REST contracts ----
 
@@ -324,7 +324,7 @@ describe('health route', () => {
 import 'dotenv/config';
 export const env = {
   PORT: Number(process.env.V2_PORT ?? 4000),
-  ADMIN_PASSWORD: process.env.ADMIN_PASSWORD ?? 'centrechurch',
+  ADMIN_PASSWORD: process.env.ADMIN_PASSWORD ?? 'changeme',
   CERT_DIR: process.env.CERT_DIR ?? new URL('../../cert/', import.meta.url).pathname,
 };
 ```

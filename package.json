@@ -1,7 +1,7 @@
 {
-  "name": "center-church-live-translation",
+  "name": "live-translate",
   "version": "1.0.0",
-  "description": "AI-powered real-time sermon translation for Center Church using Google Gemini 3.5 Live Translate.",
+  "description": "AI-powered real-time speech translation using Google Gemini and Qwen Live Translate.",
   "main": "src/server.js",
   "workspaces": ["web", "server", "shared"],
   "scripts": {
@@ -15,16 +15,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zezking/church-live-translation.git"
+    "url": "git+https://github.com/zezking/live-translate.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "bugs": {
-    "url": "https://github.com/zezking/church-live-translation/issues"
+    "url": "https://github.com/zezking/live-translate/issues"
   },
-  "homepage": "https://github.com/zezking/church-live-translation#readme",
+  "homepage": "https://github.com/zezking/live-translate#readme",
   "dependencies": {
     "@google/genai": "^2.8.0",
     "dotenv": "^17.4.2",

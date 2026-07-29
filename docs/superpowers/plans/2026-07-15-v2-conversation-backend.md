@@ -160,7 +160,7 @@ describe('QwenTranslationSession config', () => {
   - `conversationManager.on('error', ...)` log handler.
   - Use `import type` for any `@v2/shared` types. Keep all Plan 2 church-mode routes/wiring intact.
 - [ ] **Step 3: typecheck + build** → exit 0.
-- [ ] **Step 4: Boot + smoke** — `V2_PORT=4000 npm -w server run dev &`, `sleep 3`, then (without a real Qwen key) `curl -k -s -X POST -H "Authorization: Bearer centrechurch" -H "Content-Type: application/json" -d '{"hostName":"Enze","partnerName":"아버님"}' https://localhost:4000/api/conversation/create` → expect `{"error":"No Qwen API key..."}` (proves the route + auth; live create verified in Plan 4). Then `kill %1`.
+- [ ] **Step 4: Boot + smoke** — `V2_PORT=4000 npm -w server run dev &`, `sleep 3`, then (without a real Qwen key) `curl -k -s -X POST -H "Authorization: Bearer changeme" -H "Content-Type: application/json" -d '{"hostName":"Enze","partnerName":"아버님"}' https://localhost:4000/api/conversation/create` → expect `{"error":"No Qwen API key..."}` (proves the route + auth; live create verified in Plan 4). Then `kill %1`.
 - [ ] **Step 5: Commit** — `feat(v2): wire conversation endpoints + /ws/conversation + /conversation route`.
 
 ---

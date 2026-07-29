@@ -15,7 +15,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const server = createServer(app);
 const PORT = process.env.PORT || 3000;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'centrechurch';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme';
 
 const apiKeys = {
   gemini: process.env.GEMINI_API_KEY,
@@ -266,7 +266,7 @@ app.get('/api/audio-level', requireAdmin, (req, res) => {
 
 server.listen(PORT, '0.0.0.0', async () => {
   const ip = await getLocalIP();
-  console.log(`\n  Centre Church Live Translation`);
+  console.log(`\n  Live Translate`);
   console.log(`  Admin:       http://localhost:${PORT}/admin`);
   console.log(`  Attendee:    http://${ip}:${PORT}`);
   console.log(`  Interpreter: http://${ip}:${PORT}/interpreter`);

@@ -29,10 +29,10 @@ describe('SetupView', () => {
     const onSetAdminKey = vi.fn();
     const onValidateAdmin = vi.fn().mockResolvedValue(true);
     const { getByPlaceholderText, getByRole } = setup({ adminKey: '', onSetAdminKey, onValidateAdmin });
-    fireEvent.change(getByPlaceholderText(/Admin password/i), { target: { value: 'centrechurch' } });
+    fireEvent.change(getByPlaceholderText(/Admin password/i), { target: { value: 'changeme' } });
     fireEvent.click(getByRole('button', { name: /Continue/i }));
-    await waitFor(() => expect(onSetAdminKey).toHaveBeenCalledWith('centrechurch'));
-    expect(onValidateAdmin).toHaveBeenCalledWith('centrechurch');
+    await waitFor(() => expect(onSetAdminKey).toHaveBeenCalledWith('changeme'));
+    expect(onValidateAdmin).toHaveBeenCalledWith('changeme');
   });
 
   it('wrong password shows an inline error and does NOT store the key', async () => {

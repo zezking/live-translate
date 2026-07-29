@@ -683,7 +683,7 @@ Open `http://localhost:3000/admin`, log in, leave source as USB (Task 5 adds the
 Manual checks:
 - Click START, speak into mic, confirm translation flows to attendee page
 - `curl -s http://localhost:3000/api/status | grep inputSource` should show `"inputSource":"usb"` while running, `"inputSource":null` when stopped
-- `curl -s -X POST -H "Authorization: Bearer centrechurch" -H "Content-Type: application/json" -d '{"inputSource":"invalid"}' http://localhost:3000/api/start` should return HTTP 400 with `{"error":"Invalid inputSource: invalid"}`
+- `curl -s -X POST -H "Authorization: Bearer changeme" -H "Content-Type: application/json" -d '{"inputSource":"invalid"}' http://localhost:3000/api/start` should return HTTP 400 with `{"error":"Invalid inputSource: invalid"}`
 
 - [ ] **Step 6: Commit**
 
@@ -1433,7 +1433,7 @@ The admin panel can capture audio from three sources (selectable on the admin pa
 | Source | What it captures | Platform |
 |--------|------------------|----------|
 | **USB** (default) | The UCA222 / USB interface via `sox` + CoreAudio — the production booth setup | macOS only |
-| **Browser** | Audio playing in a browser tab (e.g. a YouTube sermon). The admin clicks START, then picks a Chrome Tab in the picker and ticks "Share tab audio" | Any OS, Chrome/Edge |
+| **Browser** | Audio playing in a browser tab (e.g. a YouTube speech). The admin clicks START, then picks a Chrome Tab in the picker and ticks "Share tab audio" | Any OS, Chrome/Edge |
 | **System** | Full macOS audio loopback — any app's output. The admin clicks START, then picks Entire Screen and ticks "Share system audio" | Chrome/Edge on macOS |
 
 USB is the production source. Browser and System are intended for quick testing with pre-recorded content and for demos without the booth hardware.

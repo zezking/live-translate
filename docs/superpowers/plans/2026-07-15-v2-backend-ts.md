@@ -54,7 +54,7 @@ server/src/
 - Create: `server/src/types/node-record-lpcm16.d.ts` (only if `@types/node-record-lpcm16` is absent)
 
 **Interfaces:**
-- Produces: `server/` has all deps needed by the port (`@google/genai`, `node-record-lpcm16`, `qrcode`, `@types/qrcode`); `npm install` succeeds; a smoke `import type { ChurchWsMessage } from '@v2/shared'` in a throwaway file typechecks (proving the type-only convention compiles + erases).
+- Produces: `server/` has all deps needed by the port (`@google/genai`, `node-record-lpcm16`, `qrcode`, `@types/qrcode`); `npm install` succeeds; a smoke `import type { TranslationWsMessage } from '@v2/shared'` in a throwaway file typechecks (proving the type-only convention compiles + erases).
 
 - [ ] **Step 1: Add deps to server/package.json**
 
@@ -86,7 +86,7 @@ declare module 'node-record-lpcm16' {
 
 - [ ] **Step 4: Smoke-test the type-only shared import**
 
-Temporarily add to `server/src/routes/health.ts`: `import type { ChurchWsMessage } from '@v2/shared';` and a `_use(_: ChurchWsMessage) {}` stub. Run `npm -w server run typecheck` → exit 0. Then revert the stub (keep health.ts as-is). This proves the type-only convention works. Confirm `npm -w server run build` (tsc) still succeeds.
+Temporarily add to `server/src/routes/health.ts`: `import type { TranslationWsMessage } from '@v2/shared';` and a `_use(_: TranslationWsMessage) {}` stub. Run `npm -w server run typecheck` → exit 0. Then revert the stub (keep health.ts as-is). This proves the type-only convention works. Confirm `npm -w server run build` (tsc) still succeeds.
 
 - [ ] **Step 5: Commit**
 

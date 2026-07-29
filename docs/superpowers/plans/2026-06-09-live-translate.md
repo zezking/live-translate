@@ -8,7 +8,7 @@
 
 **Tech Stack:** Node.js, Express, `@google/genai`, `ws` (WebSocket), `qrcode`, HTML/CSS/JS (no framework), `node-record-lpcm16` for audio capture
 
-**Spec:** `docs/superpowers/specs/2026-06-09-church-live-translation-design.md`
+**Spec:** `docs/superpowers/specs/2026-06-09-live-translate-design.md`
 
 ---
 
@@ -706,7 +706,7 @@ app.get('/api/audio-level', (req, res) => {
 // Start server
 server.listen(PORT, '0.0.0.0', async () => {
   const ip = await getLocalIP();
-  console.log(`\n  Centre Church Live Translation`);
+  console.log(`\n  Live Translate`);
   console.log(`  Admin:  http://localhost:${PORT}/admin`);
   console.log(`  Attend: http://${ip}:${PORT}`);
   console.log(`  Press Ctrl+C to stop\n`);
@@ -739,7 +739,7 @@ The mobile-first page where attendees select a language and listen to translated
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Centre Church — Live Translation</title>
+  <title>Live Translate — Live Translation</title>
   <link rel="stylesheet" href="attendee.css">
 </head>
 <body>
@@ -747,14 +747,14 @@ The mobile-first page where attendees select a language and listen to translated
     <!-- Language Selection View -->
     <div id="select-view">
       <div class="header">
-        <h1 class="title">CENTRE CHURCH</h1>
+        <h1 class="title">LIVE TRANSLATE</h1>
         <p class="subtitle">Live Translation</p>
       </div>
       <div class="divider"></div>
       <p class="prompt">Select your language:</p>
       <div id="language-buttons" class="language-list"></div>
       <div class="divider"></div>
-      <p class="footer">Centre Church 2025</p>
+      <p class="footer">Live Translate 2025</p>
     </div>
 
     <!-- Player View -->
@@ -773,7 +773,7 @@ The mobile-first page where attendees select a language and listen to translated
       </div>
       <button id="change-lang-btn" class="change-lang">&larr; Change Language</button>
       <div class="divider"></div>
-      <p class="footer">Centre Church 2025</p>
+      <p class="footer">Live Translate 2025</p>
     </div>
   </div>
 
@@ -1217,13 +1217,13 @@ The operator control panel with dark theme, start/pause/stop controls, audio lev
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Centre Church — Live Translation Control</title>
+  <title>Live Translate — Live Translation Control</title>
   <link rel="stylesheet" href="admin.css">
 </head>
 <body>
   <div id="app">
     <div class="header">
-      <h1 class="title">CENTRE CHURCH — Live Translation Control</h1>
+      <h1 class="title">LIVE TRANSLATE — Live Translation Control</h1>
     </div>
     <div class="section-divider"></div>
 
@@ -1284,7 +1284,7 @@ The operator control panel with dark theme, start/pause/stop controls, audio lev
     </div>
 
     <div class="section-divider"></div>
-    <p class="footer">Centre Church 2025</p>
+    <p class="footer">Live Translate 2025</p>
   </div>
 
   <script src="admin.js"></script>
@@ -1687,13 +1687,13 @@ body {
     const win = window.open('', '_blank');
     win.document.write(`
       <html>
-        <head><title>QR Code — Centre Church Live Translation</title>
+        <head><title>QR Code — Live Translate</title>
         <style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;}</style>
         </head>
         <body>
           <img src="${qrImage.src}" style="width:400px;height:400px;">
           <p style="margin-top:24px;font-size:24px;">${url}</p>
-          <p style="margin-top:8px;color:#999;">Centre Church — Live Translation</p>
+          <p style="margin-top:8px;color:#999;">Live Translate — Live Translation</p>
         </body>
       </html>
     `);
@@ -1754,7 +1754,7 @@ npm run dev
 
 Expected output:
 ```
-  Centre Church Live Translation
+  Live Translate
   Admin:  http://localhost:3000/admin
   Attend: http://192.168.x.x:3000
   Press Ctrl+C to stop

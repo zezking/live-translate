@@ -59,7 +59,7 @@ describe('QwenTranslationSession config', () => {
     expect(cfg.input_audio_transcription.language).toBe('zh');
     expect(cfg.modalities).toEqual(['text']);
   });
-  it('defaults sourceLanguage=en and modalities=[text,audio] (church-mode compat)', () => {
+  it('defaults sourceLanguage=en and modalities=[text,audio] (broadcast-mode compat)', () => {
     const s = new QwenTranslationSession('key', 'ko', {}, {});
     const cfg = (s as any)._buildSessionConfig('ko');
     expect(cfg.input_audio_transcription.language).toBe('en');
