@@ -1,12 +1,15 @@
 import SwiftUI
 import CoreAudio
+import ScreenCaptureKit
+import AppKit
 
 struct SessionSetupView: View {
     @Environment(KeychainStore.self) private var keychain
     @Environment(AppSettings.self) private var settings
 
-    @State private var interp: DuoInterpreter?
+    @State private var interp: StreamTranslator?
     @State private var started = false
+    @State private var browserWindow: SCWindow?
 
     var body: some View {
         Group {
@@ -41,7 +44,16 @@ struct SessionSetupView: View {
                     }
                 }
                 Section("Input") {
-                    DevicePicker()
+                    Picker("Source", selection: bindInputMode()) {
+                        ForEach(InputMode.allCases) { Text($0.label).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    switch settings.inputMode {
+                    case .mic:
+                        DevicePicker()
+                    case .browser:
+                        BrowserSourcePicker(selectedWindow: $browserWindow)
+                    }
                 }
                 if settings.sourceLanguage == settings.targetLanguage {
                     Text("Pick two different languages.")
@@ -57,7 +69,7 @@ struct SessionSetupView: View {
                 Spacer()
                 Button("Start interpreter") { start() }
                     .buttonStyle(.borderedProminent)
-                    .disabled(settings.sourceLanguage == settings.targetLanguage)
+                    .disabled(settings.sourceLanguage == settings.targetLanguage || (settings.inputMode == .browser && browserWindow == nil))
             }
             .padding(16)
         }
@@ -65,15 +77,32 @@ struct SessionSetupView: View {
     }
 
     private func start() {
-        let model = DuoInterpreter(
+        let source: AudioSource
+        var label = "Microphone"
+        switch settings.inputMode {
+        case .mic:
+            source = AudioCaptureEngine()
+        case .browser:
+            let engine = ScreenCaptureAudioEngine()
+            engine.selectedWindow = browserWindow
+            source = engine
+            label = browserWindow?.owningApplication?.applicationName ?? "Browser"
+        }
+        let model = StreamTranslator(
             apiKey: keychain.apiKey,
             sourceLanguage: settings.sourceLanguage,
             targetLanguage: settings.targetLanguage,
             voiceOver: settings.voiceOver,
-            voiceClone: true
+            voiceClone: true,
+            source: source,
+            sourceLabel: label
         )
         interp = model
         started = true
+    }
+
+    private func bindInputMode() -> Binding<InputMode> {
+        Binding(get: { settings.inputMode }, set: { settings.inputMode = $0 })
     }
 
     private func bind(_ keyPath: ReferenceWritableKeyPath<AppSettings, String>) -> Binding<String> {
@@ -107,5 +136,107 @@ struct DevicePicker: View {
     private func reload() {
         devices = AudioDevices.inputDevices()
         selected = AudioDevices.defaultInputDeviceID() ?? (devices.first?.id ?? 0)
+    }
+}
+
+/// Lists on-screen browser/app windows (via ScreenCaptureKit) and lets the user
+/// pick one to capture audio from. Requires the Screen Recording TCC permission.
+struct BrowserSourcePicker: View {
+    @Binding var selectedWindow: SCWindow?
+
+    @State private var windows: [SCWindow] = []
+    @State private var status: LoadState = .idle
+    @State private var selectionTitle: String?
+
+    private enum LoadState { case idle, loading, ready, denied, failed }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Menu {
+                    ForEach(windows, id: \.windowID) { win in
+                        Button(label(win)) { choose(win) }
+                    }
+                    if windows.isEmpty {
+                        Button(status == .loading ? "Loading…" : "No windows — retry") { load() }
+                            .disabled(true)
+                    }
+                } label: {
+                    Label(selectionTitle ?? "Pick a window…", systemImage: "rectangle.on.rectangle")
+                        .lineLimit(1)
+                }
+                Button("Refresh") { load() }
+            }
+
+            switch status {
+            case .denied:
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Screen Recording permission required.")
+                        .font(.caption).foregroundStyle(.orange)
+                    Text("After enabling it, quit (⌘Q) and reopen the app, then Refresh.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                    Button("Open System Settings") { openPrivacyPane() }
+                        .font(.caption)
+                }
+            case .failed:
+                Text("Couldn't list windows. Try Refresh.")
+                    .font(.caption).foregroundStyle(.orange)
+            default:
+                EmptyView()
+            }
+        }
+        .onAppear { if selectionTitle == nil { load() } }
+    }
+
+    private func choose(_ win: SCWindow) {
+        selectedWindow = win
+        selectionTitle = label(win)
+    }
+
+    private func label(_ win: SCWindow) -> String {
+        let app = win.owningApplication?.applicationName ?? "App"
+        let title = win.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return title.isEmpty ? app : "\(app) — \(title)"
+    }
+
+    private func load() {
+        status = .loading
+        Task {
+            let preflight = CGPreflightScreenCaptureAccess()
+            LTLog.log("[sc-pick] preflight screenCaptureAccess=\(preflight)")
+            if !preflight {
+                let requested = CGRequestScreenCaptureAccess()
+                LTLog.log("[sc-pick] requested access -> \(requested)")
+            }
+            do {
+                let content = try await SCShareableContent.excludingDesktopWindows(
+                    false, onScreenWindowsOnly: true)
+                LTLog.log("[sc-pick] shareable content OK: \(content.windows.count) windows, \(content.applications.count) apps")
+                let usable = content.windows.filter { win in
+                    let app = win.owningApplication?.applicationName ?? ""
+                    let title = win.title ?? ""
+                    return !app.isEmpty && !title.isEmpty
+                }.sorted(by: {
+                    let a = $0.owningApplication?.applicationName ?? ""
+                    let b = $1.owningApplication?.applicationName ?? ""
+                    return a.localizedCaseInsensitiveCompare(b) == .orderedAscending
+                })
+                await MainActor.run {
+                    self.windows = usable
+                    self.status = usable.isEmpty ? .failed : .ready
+                }
+            } catch {
+                let ns = error as NSError
+                LTLog.log("[sc-pick] shareable content FAILED: \(error.localizedDescription) domain=\(ns.domain) code=\(ns.code)")
+                await MainActor.run { self.status = .denied }
+            }
+        }
+    }
+
+
+    private func openPrivacyPane() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+            NSWorkspace.shared.open(url)
+        }
     }
 }

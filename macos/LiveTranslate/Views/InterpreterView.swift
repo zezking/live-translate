@@ -1,14 +1,17 @@
 import SwiftUI
 
+/// The always-on session screen: live captions (original + translation) with a
+/// level meter and an End button. No push-to-talk — the audio source is treated
+/// as a continuous stream.
 struct InterpreterView: View {
-    let interp: DuoInterpreter
+    let interp: StreamTranslator
     var onEnded: () -> Void = {}
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
-            TranscriptRiverView(interp: interp)
+            LiveTranscriptView(interp: interp)
             Divider()
             controls
         }
@@ -21,10 +24,11 @@ struct InterpreterView: View {
     private var header: some View {
         HStack(spacing: 12) {
             statusDot
-            if interp.phase == .ready, let direction = interp.activeDirection {
-                Text("Speaking \(direction == .a ? interp.sourceName : interp.targetName)")
+            if interp.phase == .ready {
+                Text("\(interp.sourceLabel) → \(interp.targetName)")
                     .foregroundStyle(.secondary)
                     .font(.callout)
+                    .lineLimit(1)
             }
             Spacer()
             ProgressView(value: Double(interp.level))
@@ -46,24 +50,7 @@ struct InterpreterView: View {
     }
 
     private var controls: some View {
-        let ready = interp.phase == .ready
-        return VStack(spacing: 12) {
-            HStack(spacing: 14) {
-                HoldButton(
-                    title: "\(interp.sourceName) → \(interp.targetName)",
-                    systemImage: "mic.fill",
-                    tint: .blue,
-                    disabled: !ready
-                ) { interp.press(.a) } onRelease: { interp.release() }
-
-                HoldButton(
-                    title: "\(interp.targetName) → \(interp.sourceName)",
-                    systemImage: "mic.fill",
-                    tint: .green,
-                    disabled: !ready
-                ) { interp.press(.b) } onRelease: { interp.release() }
-            }
-
+        VStack(spacing: 12) {
             if let error = interp.lastError {
                 Text(error)
                     .font(.callout)
@@ -80,104 +67,75 @@ struct InterpreterView: View {
     }
 }
 
-struct TranscriptRiverView: View {
-    let interp: DuoInterpreter
+/// Live captions: the cumulative original (prominent) and its translation
+/// (secondary), replacing on every delta and auto-scrolling to the latest.
+struct LiveTranscriptView: View {
+    let interp: StreamTranslator
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
-                    ForEach(interp.turns) { turn in
-                        TurnRow(turn: turn)
-                    }
-                    if interp.turns.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    if interp.original.isEmpty && interp.translation.isEmpty {
                         Text(hint)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity)
                             .padding(.top, 40)
+                    } else {
+                        // Both slots are always reserved so neither field shifts
+                        // position as content arrives. Translation sits on top
+                        // (that's what's read into the broadcast mic); original is
+                        // anchored beneath as a muted reference.
+
+                        // Slot 1 — translation (always rendered; placeholder until ready)
+                        CaptionLabel(text: interp.targetName)
+                        if interp.translation.isEmpty {
+                            Text("Translating…")
+                                .font(.title3)
+                                .italic()
+                                .foregroundStyle(.tertiary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            Text(interp.translation)
+                                .font(.title3)
+                                .fontWeight(.medium)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        // Slot 2 — original (reference, fixed beneath translation)
+                        if !interp.original.isEmpty {
+                            CaptionLabel(text: interp.sourceName)
+                            Text(interp.original)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
+                    Color.clear.frame(height: 1).id("bottom")
                 }
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .onChange(of: interp.turns.last?.id) { _, _ in
-                if let last = interp.turns.last {
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        proxy.scrollTo(last.id, anchor: .bottom)
-                    }
-                }
-            }
+            .onChange(of: interp.original) { _, _ in scrollToBottom(proxy) }
+            .onChange(of: interp.translation) { _, _ in scrollToBottom(proxy) }
+        }
+    }
+
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        withAnimation(.easeOut(duration: 0.15)) {
+            proxy.scrollTo("bottom", anchor: .bottom)
         }
     }
 
     private var hint: String {
         switch interp.phase {
         case .connecting: return "Connecting to Qwen…"
-        case .ready: return "Hold a button below and speak."
+        case .ready: return "Listening — speak into the source."
         case .ended: return "Session ended."
         default: return ""
         }
-    }
-}
-
-struct TurnRow: View {
-    let turn: Turn
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(Language.name(for: turn.lang))
-                .font(.caption)
-                .fontWeight(.bold)
-                .foregroundStyle(turn.isActive ? .primary : .secondary)
-            if !turn.original.isEmpty {
-                Text(turn.original)
-                    .font(.body)
-                    .textSelection(.enabled)
-            }
-            if !turn.translation.isEmpty {
-                Text(turn.translation)
-                    .font(.callout)
-                    .foregroundStyle(.tertiary)
-                    .textSelection(.enabled)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-struct HoldButton: View {
-    let title: String
-    let systemImage: String
-    let tint: Color
-    let disabled: Bool
-    let onPress: () -> Void
-    let onRelease: () -> Void
-    @State private var held = false
-
-    var body: some View {
-        Label(title, systemImage: systemImage)
-            .font(.headline)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 20)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(held ? tint.opacity(0.92) : tint.opacity(0.12))
-            )
-            .foregroundStyle(held ? Color.white : tint)
-            .opacity(disabled ? 0.35 : 1)
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in
-                        guard !held, !disabled else { return }
-                        held = true
-                        onPress()
-                    }
-                    .onEnded { _ in
-                        guard held else { return }
-                        held = false
-                        onRelease()
-                    }
-            )
     }
 }
 
@@ -189,5 +147,17 @@ struct StatusDot: View {
             Circle().fill(color).frame(width: 8, height: 8)
             Text(label).font(.callout).foregroundStyle(.secondary)
         }
+    }
+}
+
+/// Tiny uppercase language tag sitting above a transcript block.
+struct CaptionLabel: View {
+    let text: String
+    var body: some View {
+        Text(text.uppercased())
+            .font(.caption2)
+            .fontWeight(.semibold)
+            .foregroundStyle(.tertiary)
+            .tracking(0.5)
     }
 }

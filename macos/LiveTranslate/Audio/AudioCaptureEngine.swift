@@ -3,7 +3,7 @@ import AVFoundation
 /// Captures audio from the system default input device (mic or USB interface),
 /// resamples to 16 kHz / Int16 / mono PCM, and emits ~100 ms chunks — exactly
 /// the format Qwen's realtime endpoint expects (`input_audio_buffer.append`).
-final class AudioCaptureEngine: @unchecked Sendable {
+final class AudioCaptureEngine: AudioSource, @unchecked Sendable {
     private let engine = AVAudioEngine()
     private let targetFormat: AVAudioFormat
     private var converter: AVAudioConverter?
@@ -16,6 +16,8 @@ final class AudioCaptureEngine: @unchecked Sendable {
     var onChunk: ((Data) -> Void)?
     /// Receives a rough 0...1 input level (for the meter), on the main thread.
     var onLevel: ((Float) -> Void)?
+    /// Unused for the mic path (kept to satisfy `AudioSource`); start() throws on failure.
+    var onError: ((String) -> Void)?
 
     init() {
         targetFormat = AVAudioFormat(

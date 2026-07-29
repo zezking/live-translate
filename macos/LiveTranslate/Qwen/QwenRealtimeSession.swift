@@ -22,6 +22,7 @@ final class QwenRealtimeSession: @unchecked Sendable {
 
     private var lastInputText = ""
     private var lastOutputText = ""
+    private var sendAudioWhileInactiveLogged = false
 
     // Callbacks (invoked from the URLSession delegate queue — hop to MainActor at the call site).
     var onReady: (() -> Void)?
@@ -80,7 +81,13 @@ final class QwenRealtimeSession: @unchecked Sendable {
     }
 
     func sendAudio(_ pcm: Data) {
-        guard isActive else { return }
+        guard isActive else {
+            if !sendAudioWhileInactiveLogged {
+                sendAudioWhileInactiveLogged = true
+                LTLog.log("[qwen] dropping audio — session not active yet")
+            }
+            return
+        }
         let payload: [String: Any] = [
             "type": "input_audio_buffer.append",
             "audio": pcm.base64EncodedString(),

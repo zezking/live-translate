@@ -1,9 +1,11 @@
 # Live Translate — native macOS app
 
-A standalone macOS app (SwiftUI) for real-time, two-way interpretation powered by
-Qwen's realtime translation WebSocket. Built as the v1 MVP: **interpreter mode** —
-capture speech from a mic or USB audio interface, see the original + translated
-text on screen (duplicate-free), with optional translated voice-over. No server,
+A standalone macOS app (SwiftUI) for real-time, one-way live translation powered by
+Qwen's realtime translation WebSocket. Built as the v1 MVP: **stream mode** —
+capture speech continuously from a mic, USB audio interface, or a browser/app
+window, and show the original + translated text live (duplicate-free), with
+optional translated voice-over. There is **no push-to-talk**: the source is
+treated as a continuous stream (suited to a live sermon or talk). No server,
 no browser, no attendee broadcast (those are parked for a later phase).
 
 ## Prerequisites
@@ -37,13 +39,13 @@ Or open `LiveTranslate.xcodeproj` in Xcode and hit ⌘R.
 
 1. **First launch** → paste your DashScope API key. It’s stored in Keychain.
 2. **Setup screen** → choose the two languages, toggle translated voice-over, and
-   pick your **input device** (the USB interface, or a mic). Selecting a device
-   sets it as the system default input so the app captures from it.
-3. **Start interpreter** → the app connects two warm Qwen sessions (one each
-   direction).
-4. **Hold** a direction button and speak; release when your turn ends. The
-   transcript river shows the original and the translation, replacing (not
-   appending) as Qwen revises — so text never duplicates.
+   pick your **input source**: the **Microphone / USB** interface or **Browser / App**
+   window (via ScreenCaptureKit — needs Screen Recording permission). Selecting a
+   device sets it as the system default input so the app captures from it.
+3. **Start interpreter** → the app connects one warm Qwen session (source → target).
+4. The app **continuously captures and translates** the source. The transcript shows
+   the original and the translation, replacing (not appending) as Qwen revises —
+   so text never duplicates.
 
 ## Notes / current scope
 
@@ -65,6 +67,6 @@ LiveTranslate/
 ├── Audio/          AudioCaptureEngine (→16 kHz Int16), PlaybackEngine (24 kHz),
 │                   AudioDevices (Core Audio device enumeration)
 ├── Qwen/           QwenRealtimeSession     – faithful port of qwen-translation-session.ts
-├── Conversation/   DuoInterpreter          – two warm sessions, PTT, replace-not-append
-└── Views/          Root, Onboarding, SessionSetup, Interpreter (river + PTT)
+├── Conversation/   StreamTranslator        – one warm session, always-on, replace-not-append
+└── Views/          Root, Onboarding, SessionSetup, Interpreter (live captions)
 ```

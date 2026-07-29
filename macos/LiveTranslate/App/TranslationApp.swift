@@ -5,6 +5,10 @@ struct LiveTranslateApp: App {
     @State private var keychain = KeychainStore()
     @State private var settings = AppSettings()
 
+    init() {
+        LTLog.log("\n=== LiveTranslate launched \(Date()) ===")
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
