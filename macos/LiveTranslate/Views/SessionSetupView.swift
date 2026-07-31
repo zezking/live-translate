@@ -81,7 +81,14 @@ struct SessionSetupView: View {
         var label = "Microphone"
         switch settings.inputMode {
         case .mic:
-            source = AudioCaptureEngine()
+            // Resolve the persisted device selection (UID survives reconnects;
+            // AudioDeviceIDs don't). The engine keeps this device pinned as the
+            // system default for the whole session.
+            let deviceID = settings.inputDeviceUID.flatMap { AudioDevices.deviceID(forUID: $0) }
+            source = AudioCaptureEngine(preferredDeviceID: deviceID)
+            if let deviceID, let name = AudioDevices.deviceName(forID: deviceID) {
+                label = name
+            }
         case .browser:
             let engine = ScreenCaptureAudioEngine()
             engine.selectedWindow = browserWindow
@@ -114,9 +121,11 @@ struct SessionSetupView: View {
     }
 }
 
-/// Lists audio input devices and sets the chosen one as the system default
-/// (which AVAudioEngine captures from).
+/// Lists audio input devices, persists the choice (by UID), and sets it as the
+/// system default (which AVAudioEngine captures from; AudioCaptureEngine then
+/// keeps it pinned against macOS auto-switching).
 struct DevicePicker: View {
+    @Environment(AppSettings.self) private var settings
     @State private var devices: [AudioInputDevice] = []
     @State private var selected: AudioDeviceID = 0
 
@@ -126,6 +135,8 @@ struct DevicePicker: View {
                 ForEach(devices) { Text($0.name).tag($0.id) }
             }
             .onChange(of: selected) { _, newValue in
+                guard let device = devices.first(where: { $0.id == newValue }) else { return }
+                settings.inputDeviceUID = device.uid
                 AudioDevices.setDefaultInputDevice(newValue)
             }
             Button("Refresh") { reload() }
@@ -135,7 +146,12 @@ struct DevicePicker: View {
 
     private func reload() {
         devices = AudioDevices.inputDevices()
-        selected = AudioDevices.defaultInputDeviceID() ?? (devices.first?.id ?? 0)
+        if let uid = settings.inputDeviceUID,
+           let match = devices.first(where: { $0.uid == uid }) {
+            selected = match.id
+        } else {
+            selected = AudioDevices.defaultInputDeviceID() ?? (devices.first?.id ?? 0)
+        }
     }
 }
 

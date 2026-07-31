@@ -67,60 +67,65 @@ struct InterpreterView: View {
     }
 }
 
-/// Live captions: the cumulative original (prominent) and its translation
-/// (secondary), replacing on every delta and auto-scrolling to the latest.
+/// Live captions as a river: finished slices scroll up and stay readable; the
+/// live slice sits at the bottom. Translation prominent, original as a muted
+/// reference beneath it — per slice.
 struct LiveTranscriptView: View {
     let interp: StreamTranslator
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    if interp.original.isEmpty && interp.translation.isEmpty {
+                LazyVStack(alignment: .leading, spacing: 20) {
+                    if interp.entries.isEmpty {
                         Text(hint)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity)
                             .padding(.top, 40)
-                    } else {
-                        // Both slots are always reserved so neither field shifts
-                        // position as content arrives. Translation sits on top
-                        // (that's what's read into the broadcast mic); original is
-                        // anchored beneath as a muted reference.
-
-                        // Slot 1 — translation (always rendered; placeholder until ready)
-                        CaptionLabel(text: interp.targetName)
-                        if interp.translation.isEmpty {
-                            Text("Translating…")
-                                .font(.title3)
-                                .italic()
-                                .foregroundStyle(.tertiary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        } else {
-                            Text(interp.translation)
-                                .font(.title3)
-                                .fontWeight(.medium)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-
-                        // Slot 2 — original (reference, fixed beneath translation)
-                        if !interp.original.isEmpty {
-                            CaptionLabel(text: interp.sourceName)
-                            Text(interp.original)
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
+                    }
+                    ForEach(interp.entries) { entry in
+                        sliceView(entry)
+                            .id(entry.id)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
                     Color.clear.frame(height: 1).id("bottom")
                 }
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .onChange(of: interp.original) { _, _ in scrollToBottom(proxy) }
-            .onChange(of: interp.translation) { _, _ in scrollToBottom(proxy) }
+            .onChange(of: interp.entries) { _, _ in scrollToBottom(proxy) }
         }
+    }
+
+    private func sliceView(_ entry: StreamTranslator.RiverEntry) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // Slot 1 — translation (what's read into the broadcast mic)
+            CaptionLabel(text: interp.targetName)
+            if entry.translation.isEmpty {
+                Text("Translating…")
+                    .font(.title3)
+                    .italic()
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text(entry.translation)
+                    .font(.title3)
+                    .fontWeight(.medium)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            // Slot 2 — original (muted reference)
+            if !entry.original.isEmpty {
+                CaptionLabel(text: interp.sourceName)
+                Text(entry.original)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .opacity(entry.live ? 1 : 0.75)
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy) {

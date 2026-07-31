@@ -27,7 +27,10 @@ final class QwenRealtimeSession: @unchecked Sendable {
     // Callbacks (invoked from the URLSession delegate queue — hop to MainActor at the call site).
     var onReady: (() -> Void)?
     var onInputTranscription: ((String) -> Void)?   // full current original text
+    var onInputFinalized: (() -> Void)?             // server VAD closed the current slice
     var onOutputTranscription: ((String) -> Void)?  // full current translation text
+    var onResponseCreated: (() -> Void)?            // a new translation response started
+    var onOutputFinalized: (() -> Void)?            // the current response's translation is final
     var onAudio: ((Data) -> Void)?                  // 24 kHz Int16 PCM
     var onError: ((String) -> Void)?
     var onClosed: ((String) -> Void)?
@@ -120,6 +123,17 @@ final class QwenRealtimeSession: @unchecked Sendable {
                 "model": "qwen3-asr-flash-realtime",
             ],
             "translation": ["language": targetLanguage],
+            // Server VAD: only cut a slice after ~1.2 s of silence (default is
+            // much shorter, which made the transcript reset mid-thought).
+            // Accepted by the livetranslate endpoint (verified against the live
+            // API — unknown keys are NOT rejected silently by all models, so
+            // keep this shape in sync with what was tested).
+            "turn_detection": [
+                "type": "server_vad",
+                "threshold": 0.5,
+                "prefix_padding_ms": 300,
+                "silence_duration_ms": 1200,
+            ],
         ]
         if voiceConfig.voiceOver && voiceConfig.voiceClone {
             sessionConfig["voice"] = "default"
@@ -166,7 +180,12 @@ final class QwenRealtimeSession: @unchecked Sendable {
             }
 
         case "conversation.item.input_audio_transcription.completed":
-            break   // transcript is cumulative; do not reset
+            // Server VAD closed the current slice. Carries no text — the final
+            // original is whatever the last `.text` event held.
+            onInputFinalized?()
+
+        case "response.created":
+            onResponseCreated?()
 
         case "response.audio_transcript.text", "response.text.text":
             let out = object["text"] as? String ?? ""
@@ -175,7 +194,10 @@ final class QwenRealtimeSession: @unchecked Sendable {
                 onOutputTranscription?(out)
             }
 
-        case "response.audio_transcript.done", "response.text.done", "response.done":
+        case "response.audio_transcript.done", "response.text.done":
+            onOutputFinalized?()
+
+        case "response.done":
             break
 
         case "response.audio.delta":
