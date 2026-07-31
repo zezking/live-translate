@@ -66,16 +66,19 @@ final class AudioCaptureEngine: AudioSource, @unchecked Sendable {
         let capacity = AVAudioFrameCount((Double(input.frameLength) * ratio).rounded(.up)) + 64
         guard let out = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: capacity) else { return }
 
+        // Keep the converter alive across tap buffers: report `.noDataNow` once the
+        // current buffer is consumed. Returning `.endOfStream` here would terminate the
+        // converter permanently — every subsequent convert() would yield zero frames.
         var fed = false
         var convError: NSError?
         let status = converter.convert(to: out, error: &convError) { _, outState in
-            if !fed {
-                fed = true
-                outState.pointee = .haveData
-                return input
+            if fed {
+                outState.pointee = .noDataNow
+                return nil
             }
-            outState.pointee = .endOfStream
-            return nil
+            fed = true
+            outState.pointee = .haveData
+            return input
         }
         guard status != .error, out.frameLength > 0 else { return }
 
