@@ -26,6 +26,11 @@ final class AppSettings {
     var inputMode: InputMode {
         didSet { defaults.set(inputMode.rawValue, forKey: "inputMode") }
     }
+    /// UID of the input device the user picked (stable across reconnects;
+    /// AudioDeviceIDs are not). Nil = system default input.
+    var inputDeviceUID: String? {
+        didSet { defaults.set(inputDeviceUID, forKey: "inputDeviceUID") }
+    }
 
     init() {
         let d = UserDefaults.standard
@@ -33,5 +38,6 @@ final class AppSettings {
         targetLanguage = d.string(forKey: "tgtLang") ?? "ko"
         voiceOver = d.object(forKey: "voiceOver") as? Bool ?? true
         inputMode = InputMode(rawValue: d.string(forKey: "inputMode") ?? "") ?? .mic
+        inputDeviceUID = d.string(forKey: "inputDeviceUID")
     }
 }

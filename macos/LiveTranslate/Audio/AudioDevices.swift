@@ -51,6 +51,16 @@ enum AudioDevices {
         return id
     }
 
+    /// Resolves a (stable-across-reconnects) device UID to the current
+    /// AudioDeviceID. Returns nil when the device isn't connected.
+    static func deviceID(forUID uid: String) -> AudioDeviceID? {
+        inputDevices().first(where: { $0.uid == uid })?.id
+    }
+
+    static func deviceName(forID id: AudioDeviceID) -> String? {
+        stringProperty(id, kAudioDevicePropertyDeviceNameCFString)
+    }
+
     /// Sets the system-wide default input device. AVAudioEngine captures from the
     /// default device, so this is how "choose your USB interface" works.
     static func setDefaultInputDevice(_ id: AudioDeviceID) {

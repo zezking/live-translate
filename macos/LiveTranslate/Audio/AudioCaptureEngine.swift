@@ -1,25 +1,47 @@
 import AVFoundation
+import CoreAudio
 
-/// Captures audio from the system default input device (mic or USB interface),
-/// resamples to 16 kHz / Int16 / mono PCM, and emits ~100 ms chunks — exactly
-/// the format Qwen's realtime endpoint expects (`input_audio_buffer.append`).
+/// Captures audio from an input device (mic or USB interface), resamples to
+/// 16 kHz / Int16 / mono PCM, and emits ~100 ms chunks — exactly the format
+/// Qwen's realtime endpoint expects (`input_audio_buffer.append`).
+///
+/// AVAudioEngine can only capture from the *system default* input device, so the
+/// engine asserts `preferredDeviceID` as the system default and then watches for
+/// macOS yanking it away (Bluetooth headsets auto-steal the default input when
+/// they connect) or for device/format changes. On any such change it re-asserts
+/// the selection and restarts the tap with a freshly built converter — capture
+/// resumes within a fraction of a second instead of silently dying (the old
+/// behavior: the converter kept the stale format and dropped every buffer).
 final class AudioCaptureEngine: AudioSource, @unchecked Sendable {
     private let engine = AVAudioEngine()
     private let targetFormat: AVAudioFormat
     private var converter: AVAudioConverter?
     private let chunkQueue = DispatchQueue(label: "app.livetranslate.audio.chunk")
+    private let controlQueue = DispatchQueue(label: "app.livetranslate.audio.control")
     private var accumulated = Data()
     private let chunkBytes = 3200   // 1600 samples × 2 bytes = 100 ms @ 16 kHz
     private(set) var isRunning = false
+
+    /// The device the user picked in the app. Re-asserted as the system default
+    /// whenever macOS flips the default input mid-session.
+    private let preferredDeviceID: AudioDeviceID?
+
+    private var configObserver: NSObjectProtocol?
+    private var defaultInputListener: AudioObjectPropertyListenerBlock?
+    private var devicesListener: AudioObjectPropertyListenerBlock?
+    private var restarting = false
+    private var consecutiveConvertErrors = 0
+    private var deviceMissingReported = false
 
     /// Receives 100 ms Int16 mono PCM chunks.
     var onChunk: ((Data) -> Void)?
     /// Receives a rough 0...1 input level (for the meter), on the main thread.
     var onLevel: ((Float) -> Void)?
-    /// Unused for the mic path (kept to satisfy `AudioSource`); start() throws on failure.
+    /// Fatal or persistent capture problems (e.g. selected device disconnected).
     var onError: ((String) -> Void)?
 
-    init() {
+    init(preferredDeviceID: AudioDeviceID? = nil) {
+        self.preferredDeviceID = preferredDeviceID
         targetFormat = AVAudioFormat(
             commonFormat: .pcmFormatInt16,
             sampleRate: 16000,
@@ -28,23 +50,21 @@ final class AudioCaptureEngine: AudioSource, @unchecked Sendable {
         )!
     }
 
+    deinit {
+        removeWatchers()
+    }
+
     func start() throws {
         guard !isRunning else { return }
-        let input = engine.inputNode
-        let inFormat = input.outputFormat(forBus: 0)
-        converter = AVAudioConverter(from: inFormat, to: targetFormat)
-
-        input.installTap(onBus: 0, bufferSize: 4096, format: inFormat) { [weak self] buffer, _ in
-            self?.process(buffer)
-        }
-
-        engine.prepare()
-        try engine.start()
+        assertPreferredDevice()
+        try startEngineAndTap()
+        installWatchers()
         isRunning = true
     }
 
     func stop() {
         guard isRunning else { return }
+        removeWatchers()
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         converter = nil
@@ -52,7 +72,132 @@ final class AudioCaptureEngine: AudioSource, @unchecked Sendable {
         isRunning = false
     }
 
-    // MARK: -
+    // MARK: - engine lifecycle
+
+    private func startEngineAndTap() throws {
+        let input = engine.inputNode
+        let inFormat = input.outputFormat(forBus: 0)
+        converter = AVAudioConverter(from: inFormat, to: targetFormat)
+        LTLog.log("[audio] starting capture — input format \(inFormat.sampleRate) Hz / \(inFormat.channelCount) ch")
+
+        input.installTap(onBus: 0, bufferSize: 4096, format: inFormat) { [weak self] buffer, _ in
+            self?.process(buffer)
+        }
+
+        engine.prepare()
+        try engine.start()
+    }
+
+    /// Tears the tap down and brings it back up against the current input
+    /// format. Safe to call when the default device or its format changed.
+    private func restart() {
+        guard !restarting else { return }
+        restarting = true
+        defer { restarting = false }
+
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        do {
+            try startEngineAndTap()
+            consecutiveConvertErrors = 0
+            LTLog.log("[audio] capture restarted OK")
+        } catch {
+            LTLog.log("[audio] restart FAILED: \(error.localizedDescription)")
+            DispatchQueue.main.async { [weak self] in
+                self?.onError?("Audio capture failed to restart: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func assertPreferredDevice() {
+        guard let preferred = preferredDeviceID else { return }
+        let current = AudioDevices.defaultInputDeviceID()
+        if current != preferred {
+            LTLog.log("[audio] default input (\(current ?? 0)) != selected (\(preferred)) — re-asserting selection")
+            AudioDevices.setDefaultInputDevice(preferred)
+            // Give Core Audio a beat to route the device before the engine reads the format.
+            // (Callers: main thread at session start, controlQueue on device events.)
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+    }
+
+    // MARK: - watchers (device flip / unplug / format change)
+
+    private func installWatchers() {
+        configObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
+        ) { [weak self] _ in
+            self?.controlQueue.async { self?.handleDeviceEvent("engine configuration changed") }
+        }
+
+        var defaultProp = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        let defaultBlock: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            self?.controlQueue.async { self?.handleDeviceEvent("default input changed") }
+        }
+        defaultInputListener = defaultBlock
+        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &defaultProp, controlQueue, defaultBlock)
+
+        var devicesProp = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        let devicesBlock: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            self?.controlQueue.async { self?.handleDeviceEvent("device list changed") }
+        }
+        devicesListener = devicesBlock
+        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &devicesProp, controlQueue, devicesBlock)
+    }
+
+    private func removeWatchers() {
+        if let configObserver { NotificationCenter.default.removeObserver(configObserver) }
+        configObserver = nil
+        if let block = defaultInputListener {
+            var prop = AudioObjectPropertyAddress(
+                mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain)
+            AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &prop, controlQueue, block)
+            defaultInputListener = nil
+        }
+        if let block = devicesListener {
+            var prop = AudioObjectPropertyAddress(
+                mSelector: kAudioHardwarePropertyDevices,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain)
+            AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &prop, controlQueue, block)
+            devicesListener = nil
+        }
+    }
+
+    /// Runs on controlQueue. Coalesces the burst of notifications a device
+    /// change produces into one decision.
+    private func handleDeviceEvent(_ reason: String) {
+        guard isRunning, !restarting else { return }
+
+        // If the selected device is gone entirely (unplugged), say so and wait
+        // for the device-list listener to fire again when it returns.
+        if let preferred = preferredDeviceID,
+           !AudioDevices.inputDevices().contains(where: { $0.id == preferred }) {
+            if !deviceMissingReported {
+                deviceMissingReported = true
+                LTLog.log("[audio] selected device disconnected (\(reason)) — waiting for it to return")
+                DispatchQueue.main.async { [weak self] in
+                    self?.onError?("Selected input device was disconnected. Reconnect it to resume.")
+                }
+            }
+            return
+        }
+        deviceMissingReported = false
+
+        LTLog.log("[audio] \(reason) — re-asserting selection and restarting capture")
+        assertPreferredDevice()
+        restart()
+    }
+
+    // MARK: - conversion
 
     private func process(_ input: AVAudioPCMBuffer) {
         guard let converter else { return }
@@ -80,7 +225,17 @@ final class AudioCaptureEngine: AudioSource, @unchecked Sendable {
             outState.pointee = .haveData
             return input
         }
-        guard status != .error, out.frameLength > 0 else { return }
+        if status == .error {
+            // A format change mid-stream (device flip) lands here until the
+            // watchers restart the tap. Count, log once, drop.
+            consecutiveConvertErrors += 1
+            if consecutiveConvertErrors == 10 {
+                LTLog.log("[audio] converter failing repeatedly (\(convError?.localizedDescription ?? "?")) — likely an input format change")
+            }
+            return
+        }
+        consecutiveConvertErrors = 0
+        guard out.frameLength > 0 else { return }
 
         guard let channel = out.int16ChannelData?[0] else { return }
         let bytes = Data(bytes: channel, count: Int(out.frameLength) * MemoryLayout<Int16>.size)
