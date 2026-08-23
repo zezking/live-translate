@@ -27,10 +27,10 @@ final class QwenRealtimeSession: @unchecked Sendable {
     // Callbacks (invoked from the URLSession delegate queue — hop to MainActor at the call site).
     var onReady: (() -> Void)?
     var onInputTranscription: ((String) -> Void)?   // full current original text
-    var onInputFinalized: (() -> Void)?             // server VAD closed the current slice
+    var onInputFinalized: ((String) -> Void)?        // server VAD closed the slice; carries the final ASR text
     var onOutputTranscription: ((String) -> Void)?  // full current translation text
     var onResponseCreated: (() -> Void)?            // a new translation response started
-    var onOutputFinalized: (() -> Void)?            // the current response's translation is final
+    var onOutputFinalized: ((String) -> Void)?      // the response's translation is final; carries the final text
     var onAudio: ((Data) -> Void)?                  // 24 kHz Int16 PCM
     var onError: ((String) -> Void)?
     var onClosed: ((String) -> Void)?
@@ -180,11 +180,15 @@ final class QwenRealtimeSession: @unchecked Sendable {
             }
 
         case "conversation.item.input_audio_transcription.completed":
-            // Server VAD closed the current slice. Carries no text — the final
-            // original is whatever the last `.text` event held.
-            onInputFinalized?()
+            // Server VAD closed the current slice. Carries the authoritative
+            // final transcript (`transcript`) — the last `.text` partial can be
+            // staler/shorter.
+            let final = object["transcript"] as? String ?? ""
+            LTLog.log("[qwen] input slice finalized (\(final.count) chars)")
+            onInputFinalized?(final)
 
         case "response.created":
+            LTLog.log("[qwen] response created")
             onResponseCreated?()
 
         case "response.audio_transcript.text", "response.text.text":
@@ -195,7 +199,11 @@ final class QwenRealtimeSession: @unchecked Sendable {
             }
 
         case "response.audio_transcript.done", "response.text.done":
-            onOutputFinalized?()
+            // Carries the final full translation (`text` for text sessions,
+            // `transcript` for audio sessions) — authoritative over the last
+            // delta, since revisions can land between them.
+            let final = (object["text"] as? String) ?? (object["transcript"] as? String) ?? ""
+            onOutputFinalized?(final)
 
         case "response.done":
             break

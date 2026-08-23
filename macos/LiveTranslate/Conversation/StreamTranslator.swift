@@ -45,12 +45,18 @@ final class StreamTranslator {
     private let capture: AudioSource
     private var playback: PlaybackEngine?
 
-    // River bookkeeping. Input and translation run on independent pointers:
-    // the translation of a slice routinely finishes AFTER the next slice has
-    // already started, so deltas can't simply go to the tail.
+    // River bookkeeping. Input and translation run on independent pipelines
+    // (the translation of a slice routinely finishes AFTER the next slice has
+    // started — verified against the live endpoint), so a translation can't
+    // simply target the tail. Instead each translation response is BOUND to a
+    // slice at response.created time — the slice being captured right then,
+    // or the just-committed one during the inter-slice gap — and all of that
+    // response's text lands on the bound slice. Unlike a counter, this cannot
+    // drift: the endpoint occasionally skips or empties a response (and ASR/
+    // response ordering is loose), which would permanently shift a counter and
+    // strand every later slice at "Translating…".
     private var liveIndex: Int?          // entry receiving original text
-    private var translatingIndex = 0     // entry receiving translation text
-    private var responseHadText = false  // current response carried non-empty text
+    private var responseIndex: Int?      // entry bound to the current response
     private var nextEntryID = 0
     private let maxEntries = 300
 
@@ -81,8 +87,7 @@ final class StreamTranslator {
         lastError = nil
         entries = []
         liveIndex = nil
-        translatingIndex = 0
-        responseHadText = false
+        responseIndex = nil
         nextEntryID = 0
         LTLog.log("[lt] begin — source=\(sourceLabel) \(sourceName) → \(targetName) voice=\(voiceOver)")
 
@@ -150,17 +155,17 @@ final class StreamTranslator {
         session.onInputTranscription = { [weak self] text in
             Task { @MainActor in self?.appendOriginal(text) }
         }
-        session.onInputFinalized = { [weak self] in
-            Task { @MainActor in self?.commitSlice() }
+        session.onInputFinalized = { [weak self] finalText in
+            Task { @MainActor in self?.commitSlice(finalText: finalText) }
         }
         session.onResponseCreated = { [weak self] in
-            Task { @MainActor in self?.responseHadText = false }
+            Task { @MainActor in self?.bindResponse() }
         }
         session.onOutputTranscription = { [weak self] text in
             Task { @MainActor in self?.appendTranslation(text) }
         }
-        session.onOutputFinalized = { [weak self] in
-            Task { @MainActor in self?.advanceTranslationPointer() }
+        session.onOutputFinalized = { [weak self] finalText in
+            Task { @MainActor in self?.finishResponse(finalText: finalText) }
         }
         session.onAudio = { [weak self] data in
             Task { @MainActor in self?.playback?.enqueue(data) }
@@ -190,32 +195,48 @@ final class StreamTranslator {
     }
 
     /// Server VAD closed the current slice — it becomes history; the next delta
-    /// opens a fresh one.
-    private func commitSlice() {
+    /// opens a fresh one. `completed` carries the authoritative final ASR text,
+    /// which can be fuller than the last partial.
+    private func commitSlice(finalText: String) {
         guard let i = liveIndex, entries.indices.contains(i) else { return }
+        if !finalText.isEmpty { entries[i].original = finalText }
         entries[i].live = false
         liveIndex = nil
         LTLog.log("[lt] slice #\(entries[i].id) committed (\(entries[i].original.count) chars)")
     }
 
-    /// Translation deltas target the slice the current response belongs to —
-    /// which may lag behind the live slice (translation trails the source).
+    /// A translation response started — bind it to the slice being captured
+    /// right now, or the just-committed one if the gap has already begun (the
+    /// endpoint's response pipeline can lag or lead the ASR pipeline slightly;
+    /// both orders bind correctly this way).
+    private func bindResponse() {
+        responseIndex = liveIndex ?? entries.indices.last
+        if let i = responseIndex {
+            LTLog.log("[lt] response bound to slice #\(entries[i].id)")
+        }
+    }
+
+    /// Translation deltas REPLACE the bound slice's text. If response.created
+    /// wasn't observed, late-bind to the current slice.
     private func appendTranslation(_ text: String) {
         guard !text.isEmpty, !entries.isEmpty else { return }
-        responseHadText = true
-        let i = min(translatingIndex, entries.count - 1)
+        let i = responseIndex ?? liveIndex ?? entries.count - 1
         entries[i].translation = text
     }
 
-    /// The current response's translation is final — the next response belongs
-    /// to the next slice. Responses that carried no text at all (VAD blips)
-    /// don't move the pointer, so a noise-triggered response can't desync the
-    /// 1:1 slice↔response mapping.
-    private func advanceTranslationPointer() {
-        if responseHadText {
-            translatingIndex += 1
+    /// The response finished — `response.*.done` carries the final full
+    /// translation, authoritative over the last delta (revisions can land
+    /// between the last delta and done). Unbind so the next response starts
+    /// fresh.
+    private func finishResponse(finalText: String) {
+        let i = responseIndex ?? (entries.isEmpty ? nil : entries.count - 1)
+        if !finalText.isEmpty, let i {
+            entries[i].translation = finalText
         }
-        responseHadText = false
+        if let i {
+            LTLog.log("[lt] translation done → slice #\(entries[i].id) (\(finalText.count) chars)")
+        }
+        responseIndex = nil
     }
 
     private func trimRiverIfNeeded() {
@@ -223,6 +244,6 @@ final class StreamTranslator {
         let drop = entries.count - maxEntries / 2
         entries.removeFirst(drop)
         liveIndex = liveIndex.map { $0 - drop }.flatMap { $0 >= 0 ? $0 : nil }
-        translatingIndex = max(0, translatingIndex - drop)
+        responseIndex = responseIndex.map { $0 - drop }.flatMap { $0 >= 0 ? $0 : nil }
     }
 }
