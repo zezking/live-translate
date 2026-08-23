@@ -14,6 +14,11 @@ final class QwenRealtimeSession: @unchecked Sendable {
     private let sourceLanguage: String
     private let targetLanguage: String
     private let voiceConfig: QwenVoiceConfig
+    /// When true the source language is left unset (per-utterance auto-detect)
+    /// and the server is asked to skip output whose detected language matches
+    /// the target — verified live: finalized events carry the detected
+    /// language, and same-language responses finalize empty (skipped).
+    private let skipTargetLanguageSpeech: Bool
 
     private var session: URLSession?
     private var task: URLSessionWebSocketTask?
@@ -27,7 +32,7 @@ final class QwenRealtimeSession: @unchecked Sendable {
     // Callbacks (invoked from the URLSession delegate queue — hop to MainActor at the call site).
     var onReady: (() -> Void)?
     var onInputTranscription: ((String) -> Void)?   // full current original text
-    var onInputFinalized: ((String) -> Void)?        // server VAD closed the slice; carries the final ASR text
+    var onInputFinalized: ((String, String) -> Void)?  // server VAD closed the slice: final ASR text + detected language
     var onOutputTranscription: ((String) -> Void)?  // full current translation text
     var onResponseCreated: (() -> Void)?            // a new translation response started
     var onOutputFinalized: ((String) -> Void)?      // the response's translation is final; carries the final text
@@ -35,11 +40,16 @@ final class QwenRealtimeSession: @unchecked Sendable {
     var onError: ((String) -> Void)?
     var onClosed: ((String) -> Void)?
 
-    init(apiKey: String, sourceLanguage: String, targetLanguage: String, voiceConfig: QwenVoiceConfig) {
+    init(apiKey: String,
+         sourceLanguage: String,
+         targetLanguage: String,
+         voiceConfig: QwenVoiceConfig,
+         skipTargetLanguageSpeech: Bool = false) {
         self.apiKey = apiKey
         self.sourceLanguage = Self.mapLang(sourceLanguage)
         self.targetLanguage = Self.mapLang(targetLanguage)
         self.voiceConfig = voiceConfig
+        self.skipTargetLanguageSpeech = skipTargetLanguageSpeech
     }
 
     private static func mapLang(_ code: String) -> String {
@@ -48,6 +58,12 @@ final class QwenRealtimeSession: @unchecked Sendable {
         case "pt-BR", "pt-PT": return "pt"
         default: return code
         }
+    }
+
+    /// Map an app language code to the endpoint's code. Public so callers can
+    /// compare a server-detected language against the configured target.
+    static func mappedLanguage(_ code: String) -> String {
+        mapLang(code)
     }
 
     // MARK: - Lifecycle
@@ -116,13 +132,28 @@ final class QwenRealtimeSession: @unchecked Sendable {
     // MARK: - Session config
 
     private func sendSessionUpdate() {
+        var asr: [String: Any] = [
+            "model": "qwen3-asr-flash-realtime",
+        ]
+        // Auto-detect per utterance when skipping: an unset source language
+        // makes the server detect each utterance (reported back on the
+        // finalized event), which drives same_language_skip_options.
+        if !skipTargetLanguageSpeech {
+            asr["language"] = sourceLanguage
+        }
+        var translation: [String: Any] = ["language": targetLanguage]
+        if skipTargetLanguageSpeech {
+            // Server-side suppression: a response whose detected source equals
+            // the target finalizes empty (only zh/en targets supported).
+            translation["same_language_skip_options"] = [
+                "skip_text": true,
+                "skip_audio": true,
+            ]
+        }
         var sessionConfig: [String: Any] = [
             "modalities": voiceConfig.voiceOver ? ["text", "audio"] : ["text"],
-            "input_audio_transcription": [
-                "language": sourceLanguage,
-                "model": "qwen3-asr-flash-realtime",
-            ],
-            "translation": ["language": targetLanguage],
+            "input_audio_transcription": asr,
+            "translation": translation,
             // Server VAD: only cut a slice after ~1.2 s of silence (default is
             // much shorter, which made the transcript reset mid-thought).
             // Accepted by the livetranslate endpoint (verified against the live
@@ -181,11 +212,12 @@ final class QwenRealtimeSession: @unchecked Sendable {
 
         case "conversation.item.input_audio_transcription.completed":
             // Server VAD closed the current slice. Carries the authoritative
-            // final transcript (`transcript`) — the last `.text` partial can be
-            // staler/shorter.
+            // final transcript (`transcript`) plus the detected `language`
+            // (present when the source language is left unset for auto-detect).
             let final = object["transcript"] as? String ?? ""
-            LTLog.log("[qwen] input slice finalized (\(final.count) chars)")
-            onInputFinalized?(final)
+            let lang = object["language"] as? String ?? ""
+            LTLog.log("[qwen] input slice finalized (lang=\(lang), \(final.count) chars)")
+            onInputFinalized?(final, lang)
 
         case "response.created":
             LTLog.log("[qwen] response created")
