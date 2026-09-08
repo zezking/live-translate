@@ -34,6 +34,13 @@ struct SessionSetupView: View {
                     Picker("Translate to", selection: bind(\.targetLanguage)) {
                         ForEach(Language.all) { Text($0.name).tag($0.code) }
                     }
+                    Toggle("Skip speech already in \(Language.name(for: settings.targetLanguage))",
+                           isOn: bind(\.skipTargetLanguageSpeech))
+                    if settings.skipTargetLanguageSpeech {
+                        Text("Auto-detects each utterance’s language and drops speech already in the target — e.g. your interpreter voice picked up by the feed. Source language is auto-detected instead of pinned.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Section("Voice") {
                     Toggle("Translated voice-over", isOn: bind(\.voiceOver))
@@ -101,6 +108,7 @@ struct SessionSetupView: View {
             targetLanguage: settings.targetLanguage,
             voiceOver: settings.voiceOver,
             voiceClone: true,
+            skipTargetLanguageSpeech: settings.skipTargetLanguageSpeech,
             source: source,
             sourceLabel: label
         )

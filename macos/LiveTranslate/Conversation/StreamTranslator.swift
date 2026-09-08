@@ -32,6 +32,9 @@ final class StreamTranslator {
     let targetLanguage: String
     let voiceOver: Bool
     let voiceClone: Bool
+    /// Drop slices whose detected language equals the target (the interpreter's
+    /// own voice bleeding into the feed) instead of keeping them in the river.
+    let skipTargetLanguageSpeech: Bool
     let sourceLabel: String      // shown in the UI so the user knows what's feeding the river
 
     /// Committed slices plus the live one at the end.
@@ -65,6 +68,7 @@ final class StreamTranslator {
          targetLanguage: String,
          voiceOver: Bool,
          voiceClone: Bool,
+         skipTargetLanguageSpeech: Bool = false,
          source: AudioSource,
          sourceLabel: String = "Microphone") {
         self.apiKey = apiKey
@@ -72,6 +76,7 @@ final class StreamTranslator {
         self.targetLanguage = targetLanguage
         self.voiceOver = voiceOver
         self.voiceClone = voiceClone
+        self.skipTargetLanguageSpeech = skipTargetLanguageSpeech
         self.capture = source
         self.sourceLabel = sourceLabel
     }
@@ -89,7 +94,7 @@ final class StreamTranslator {
         liveIndex = nil
         responseIndex = nil
         nextEntryID = 0
-        LTLog.log("[lt] begin — source=\(sourceLabel) \(sourceName) → \(targetName) voice=\(voiceOver)")
+        LTLog.log("[lt] begin — source=\(sourceLabel) \(sourceName) → \(targetName) voice=\(voiceOver) skipTarget=\(skipTargetLanguageSpeech)")
 
         // The source is a continuous stream: every captured chunk goes straight
         // to the session. sendAudio() is a no-op until the session reports ready,
@@ -125,7 +130,8 @@ final class StreamTranslator {
         let s = QwenRealtimeSession(apiKey: apiKey,
                                     sourceLanguage: sourceLanguage,
                                     targetLanguage: targetLanguage,
-                                    voiceConfig: voice)
+                                    voiceConfig: voice,
+                                    skipTargetLanguageSpeech: skipTargetLanguageSpeech)
         wire(s)
         session = s
         s.connect()
@@ -155,8 +161,8 @@ final class StreamTranslator {
         session.onInputTranscription = { [weak self] text in
             Task { @MainActor in self?.appendOriginal(text) }
         }
-        session.onInputFinalized = { [weak self] finalText in
-            Task { @MainActor in self?.commitSlice(finalText: finalText) }
+        session.onInputFinalized = { [weak self] finalText, lang in
+            Task { @MainActor in self?.commitSlice(finalText: finalText, lang: lang) }
         }
         session.onResponseCreated = { [weak self] in
             Task { @MainActor in self?.bindResponse() }
@@ -195,10 +201,30 @@ final class StreamTranslator {
     }
 
     /// Server VAD closed the current slice — it becomes history; the next delta
-    /// opens a fresh one. `completed` carries the authoritative final ASR text,
-    /// which can be fuller than the last partial.
-    private func commitSlice(finalText: String) {
+    /// opens a fresh one. `completed` carries the authoritative final ASR text
+    /// (which can be fuller than the last partial) and, when auto-detect is on,
+    /// the detected language.
+    private func commitSlice(finalText: String, lang: String) {
         guard let i = liveIndex, entries.indices.contains(i) else { return }
+        // Speech already in the target language (e.g. the interpreter's own
+        // voice picked up by the feed) is dropped from the river entirely — the
+        // server already suppresses its translation output.
+        if skipTargetLanguageSpeech,
+           !lang.isEmpty,
+           QwenRealtimeSession.mappedLanguage(lang) == QwenRealtimeSession.mappedLanguage(targetLanguage) {
+            let id = entries[i].id
+            withAnimation(.easeOut(duration: 0.2)) {
+                entries.remove(at: i)
+            }
+            liveIndex = nil
+            if responseIndex == i {
+                responseIndex = nil   // its response finalizes empty; nothing to bind
+            } else if let r = responseIndex, r > i {
+                responseIndex = r - 1  // indices above the removal shift down
+            }
+            LTLog.log("[lt] dropped target-language (\(lang)) slice #\(id)")
+            return
+        }
         if !finalText.isEmpty { entries[i].original = finalText }
         entries[i].live = false
         liveIndex = nil
@@ -225,16 +251,21 @@ final class StreamTranslator {
     }
 
     /// The response finished — `response.*.done` carries the final full
-    /// translation, authoritative over the last delta (revisions can land
-    /// between the last delta and done). Unbind so the next response starts
-    /// fresh.
+    /// translation, authoritative over the last delta. A whitespace-only final
+    /// means the server skipped the output (same-language speech): clear any
+    /// partial text that streamed before the skip took effect. Unbind so the
+    /// next response starts fresh.
     private func finishResponse(finalText: String) {
         let i = responseIndex ?? (entries.isEmpty ? nil : entries.count - 1)
-        if !finalText.isEmpty, let i {
-            entries[i].translation = finalText
-        }
         if let i {
-            LTLog.log("[lt] translation done → slice #\(entries[i].id) (\(finalText.count) chars)")
+            let final = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if final.isEmpty {
+                entries[i].translation = ""
+                LTLog.log("[lt] translation skipped for slice #\(entries[i].id)")
+            } else {
+                entries[i].translation = finalText
+                LTLog.log("[lt] translation done → slice #\(entries[i].id) (\(final.count) chars)")
+            }
         }
         responseIndex = nil
     }

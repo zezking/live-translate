@@ -23,6 +23,12 @@ final class AppSettings {
     var voiceOver: Bool {
         didSet { defaults.set(voiceOver, forKey: "voiceOver") }
     }
+    /// Drop speech already in the target language (interpreter-voice bleed):
+    /// source language is auto-detected per utterance and same-language
+    /// utterances are skipped server-side.
+    var skipTargetLanguageSpeech: Bool {
+        didSet { defaults.set(skipTargetLanguageSpeech, forKey: "skipTargetLanguageSpeech") }
+    }
     var inputMode: InputMode {
         didSet { defaults.set(inputMode.rawValue, forKey: "inputMode") }
     }
@@ -37,6 +43,7 @@ final class AppSettings {
         sourceLanguage = d.string(forKey: "srcLang") ?? "en"
         targetLanguage = d.string(forKey: "tgtLang") ?? "ko"
         voiceOver = d.object(forKey: "voiceOver") as? Bool ?? true
+        skipTargetLanguageSpeech = d.object(forKey: "skipTargetLanguageSpeech") as? Bool ?? false
         inputMode = InputMode(rawValue: d.string(forKey: "inputMode") ?? "") ?? .mic
         inputDeviceUID = d.string(forKey: "inputDeviceUID")
     }
