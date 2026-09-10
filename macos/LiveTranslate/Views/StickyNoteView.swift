@@ -45,7 +45,7 @@ struct StickyNoteView: View {
         .init(name: "Purple", hex: "452A5C"),
         .init(name: "Gray",   hex: "3A3A3C"),
     ]
-    private static let translucentOpacity = 0.72
+    private static let translucentOpacity = 0.85
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
