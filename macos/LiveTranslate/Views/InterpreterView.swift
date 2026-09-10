@@ -6,11 +6,16 @@ import SwiftUI
 struct InterpreterView: View {
     let interp: StreamTranslator
     var onEnded: () -> Void = {}
+    @Environment(AppSettings.self) private var settings
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
+            StickyNoteView(text: Binding(
+                get: { settings.stickyNote },
+                set: { settings.stickyNote = $0 }
+            ))
             LiveTranscriptView(interp: interp)
             Divider()
             controls

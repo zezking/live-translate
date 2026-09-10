@@ -42,6 +42,12 @@ struct SessionSetupView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                Section("Sticky note") {
+                    TextField("e.g. Daniel 7:18–28", text: bind(\.stickyNote))
+                    Text("Pinned at the top of the interpreter screen — handy for this week's sermon text. You can also click the note there to edit or paste a new one.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Section("Voice") {
                     Toggle("Translated voice-over", isOn: bind(\.voiceOver))
                     if settings.voiceOver {

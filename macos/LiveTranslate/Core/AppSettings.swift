@@ -37,6 +37,12 @@ final class AppSettings {
     var inputDeviceUID: String? {
         didSet { defaults.set(inputDeviceUID, forKey: "inputDeviceUID") }
     }
+    /// Text pinned at the top of the interpreter screen (e.g. this week's
+    /// sermon text "Daniel 7:18–28"). Empty = placeholder shown. Edited in
+    /// setup or by clicking the sticky note on the interpreter screen.
+    var stickyNote: String {
+        didSet { defaults.set(stickyNote, forKey: "stickyNote") }
+    }
 
     init() {
         let d = UserDefaults.standard
@@ -46,5 +52,6 @@ final class AppSettings {
         skipTargetLanguageSpeech = d.object(forKey: "skipTargetLanguageSpeech") as? Bool ?? false
         inputMode = InputMode(rawValue: d.string(forKey: "inputMode") ?? "") ?? .mic
         inputDeviceUID = d.string(forKey: "inputDeviceUID")
+        stickyNote = d.string(forKey: "stickyNote") ?? ""
     }
 }
