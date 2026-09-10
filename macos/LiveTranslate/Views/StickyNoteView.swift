@@ -43,11 +43,20 @@ struct StickyNoteView: View {
                     .italic()
                     .foregroundStyle(.tertiary)
             } else {
-                Text(text)
-                    .font(.callout)
-                    .fontWeight(.medium)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
+                // Cap the note's height: a long paste (e.g. a full chapter)
+                // must never push the transcript off screen — it scrolls
+                // inside the note instead. fixedSize lets short notes size
+                // to their content; the frame clamps long ones.
+                ScrollView {
+                    Text(text)
+                        .font(.callout)
+                        .fontWeight(.medium)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxHeight: 160)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
