@@ -10,13 +10,25 @@ struct StickyNoteView: View {
 
     @State private var editing = false
     @State private var draft = ""
+    /// Measured height of the note text; drives the ScrollView's height so a
+    /// long paste scrolls *inside* the note instead of bleeding out of it.
+    @State private var textHeight: CGFloat = maxHeight
     @FocusState private var editorFocused: Bool
+
+    /// Hard cap for the displayed note. The transcript below always keeps
+    /// its space, no matter how much text is pasted.
+    private static let maxHeight: CGFloat = 160
+
+    // Opaque Post-it palette: solid paper with dark ink, readable in both
+    // light and dark mode.
+    private static let paper = Color(red: 1.0, green: 0.96, blue: 0.72)
+    private static let ink = Color(red: 0.24, green: 0.19, blue: 0.03)
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "pin.fill")
                 .font(.caption2)
-                .foregroundStyle(.yellow)
+                .foregroundStyle(.orange)
                 .padding(.top, 4)
 
             if editing {
@@ -28,7 +40,7 @@ struct StickyNoteView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.yellow.opacity(0.12)))
+        .background(RoundedRectangle(cornerRadius: 8).fill(Self.paper))
         .padding(.horizontal, 16)
         .padding(.top, 10)
     }
@@ -41,22 +53,19 @@ struct StickyNoteView: View {
                 Text("Add a sticky note — e.g. “Daniel 7:18–28”")
                     .font(.callout)
                     .italic()
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Self.ink.opacity(0.5))
             } else {
-                // Cap the note's height: a long paste (e.g. a full chapter)
-                // must never push the transcript off screen — it scrolls
-                // inside the note instead. fixedSize lets short notes size
-                // to their content; the frame clamps long ones.
                 ScrollView {
                     Text(text)
                         .font(.callout)
                         .fontWeight(.medium)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(Self.ink)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(noteHeightReader)
                 }
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxHeight: 160)
+                .frame(height: min(textHeight, Self.maxHeight))
+                .onPreferenceChange(NoteHeightKey.self) { textHeight = $0 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -71,6 +80,8 @@ struct StickyNoteView: View {
         VStack(alignment: .leading, spacing: 6) {
             TextEditor(text: $draft)
                 .font(.callout)
+                .foregroundStyle(Self.ink)
+                .tint(Self.ink)
                 .focused($editorFocused)
                 .frame(minHeight: 48, maxHeight: 120)
                 .scrollContentBackground(.hidden)
@@ -90,6 +101,12 @@ struct StickyNoteView: View {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var noteHeightReader: some View {
+        GeometryReader { geo in
+            Color.clear.preference(key: NoteHeightKey.self, value: geo.size.height)
+        }
+    }
+
     private func beginEditing() {
         draft = text
         editing = true
@@ -102,6 +119,14 @@ struct StickyNoteView: View {
     private func endEditing(save: Bool) {
         if save { text = draft }
         editing = false
+    }
+}
+
+/// Reports the wrapped text's full height up to the view.
+private struct NoteHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 
