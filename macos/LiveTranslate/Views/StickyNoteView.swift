@@ -35,6 +35,17 @@ struct StickyNoteView: View {
                 editor
             } else {
                 display
+
+                Button {
+                    beginEditing()
+                } label: {
+                    Image(systemName: "pencil")
+                        .font(.caption2)
+                        .foregroundStyle(Self.ink.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+                .help("Edit the sticky note")
             }
         }
         .padding(.horizontal, 12)
@@ -60,7 +71,8 @@ struct StickyNoteView: View {
                         .font(.callout)
                         .fontWeight(.medium)
                         .foregroundStyle(Self.ink)
-                        .textSelection(.enabled)
+                        // No .textSelection here: selectable text swallows
+                        // macOS click gestures, which killed tap-to-edit.
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(noteHeightReader)
                 }
