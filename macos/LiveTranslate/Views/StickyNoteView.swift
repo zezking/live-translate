@@ -33,6 +33,20 @@ struct StickyNoteView: View {
     private static let darkInk = Color(red: 0.24, green: 0.19, blue: 0.03)
     private static let creamInk = Color(red: 0.94, green: 0.89, blue: 0.66)
 
+    /// Stickies-style fixed palette (dimmed for the dark UI) + binary
+    /// translucency — same UX as the native macOS Stickies app, which has
+    /// named colours and a Translucent toggle rather than a picker/slider.
+    private struct PaperPreset { let name: String; let hex: String }
+    private static let paperPresets: [PaperPreset] = [
+        .init(name: "Yellow", hex: "594F21"),
+        .init(name: "Blue",   hex: "24455E"),
+        .init(name: "Green",  hex: "1F4A38"),
+        .init(name: "Pink",   hex: "5C2E42"),
+        .init(name: "Purple", hex: "452A5C"),
+        .init(name: "Gray",   hex: "3A3A3C"),
+    ]
+    private static let translucentOpacity = 0.72
+
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "pin.fill")
@@ -111,23 +125,18 @@ struct StickyNoteView: View {
                 .frame(minHeight: 48, maxHeight: 120)
                 .scrollContentBackground(.hidden)
 
-            HStack(spacing: 10) {
-                ColorPicker(
-                    "Paper",
-                    selection: Binding(
-                        get: { Color(hex: colorHex) },
-                        set: { colorHex = $0.hex }
-                    ),
-                    supportsOpacity: false
-                )
+            HStack(spacing: 8) {
+                ForEach(Self.paperPresets, id: \.hex) { preset in
+                    paperSwatch(preset)
+                }
+                Spacer()
+                Toggle("Translucent", isOn: Binding(
+                    get: { opacity < 1.0 },
+                    set: { opacity = $0 ? Self.translucentOpacity : 1.0 }
+                ))
+                .toggleStyle(.switch)
+                .controlSize(.small)
                 .font(.caption)
-
-                Slider(value: $opacity, in: 0.1...1)
-                    .tint(ink)
-                Text("\(Int((opacity * 100).rounded()))%")
-                    .font(.caption)
-                    .monospacedDigit()
-                    .frame(width: 38, alignment: .trailing)
             }
 
             HStack {
@@ -139,6 +148,21 @@ struct StickyNoteView: View {
             }
             .font(.callout)
         }
+    }
+
+    /// One Stickies-style colour chip; the active colour gets an ink ring.
+    private func paperSwatch(_ preset: PaperPreset) -> some View {
+        let selected = colorHex.caseInsensitiveCompare(preset.hex) == .orderedSame
+        return RoundedRectangle(cornerRadius: 5)
+            .fill(Color(hex: preset.hex))
+            .frame(width: 18, height: 18)
+            .overlay(
+                RoundedRectangle(cornerRadius: 5)
+                    .strokeBorder(selected ? ink : .clear, lineWidth: 1.5)
+            )
+            .contentShape(Rectangle())
+            .onTapGesture { colorHex = preset.hex }
+            .help(preset.name)
     }
 
     private var trimmed: String {
