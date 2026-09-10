@@ -12,10 +12,11 @@ struct InterpreterView: View {
         VStack(spacing: 0) {
             header
             Divider()
-            StickyNoteView(text: Binding(
-                get: { settings.stickyNote },
-                set: { settings.stickyNote = $0 }
-            ))
+            StickyNoteView(
+                text: Binding(get: { settings.stickyNote }, set: { settings.stickyNote = $0 }),
+                colorHex: Binding(get: { settings.stickyNoteHex }, set: { settings.stickyNoteHex = $0 }),
+                opacity: Binding(get: { settings.stickyNoteOpacity }, set: { settings.stickyNoteOpacity = $0 })
+            )
             LiveTranscriptView(interp: interp)
             Divider()
             controls

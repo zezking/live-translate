@@ -43,6 +43,13 @@ final class AppSettings {
     var stickyNote: String {
         didSet { defaults.set(stickyNote, forKey: "stickyNote") }
     }
+    /// Sticky note paper colour (sRGB hex "RRGGBB") and paper opacity (0–1).
+    var stickyNoteHex: String {
+        didSet { defaults.set(stickyNoteHex, forKey: "stickyNoteHex") }
+    }
+    var stickyNoteOpacity: Double {
+        didSet { defaults.set(stickyNoteOpacity, forKey: "stickyNoteOpacity") }
+    }
 
     init() {
         let d = UserDefaults.standard
@@ -53,5 +60,7 @@ final class AppSettings {
         inputMode = InputMode(rawValue: d.string(forKey: "inputMode") ?? "") ?? .mic
         inputDeviceUID = d.string(forKey: "inputDeviceUID")
         stickyNote = d.string(forKey: "stickyNote") ?? ""
+        stickyNoteHex = d.string(forKey: "stickyNoteHex") ?? "594F21"
+        stickyNoteOpacity = d.object(forKey: "stickyNoteOpacity") as? Double ?? 1.0
     }
 }

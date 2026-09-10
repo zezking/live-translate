@@ -7,6 +7,9 @@ import SwiftUI
 /// When empty, a placeholder invites the user to add one.
 struct StickyNoteView: View {
     @Binding var text: String
+    /// Paper colour (sRGB hex "RRGGBB") and paper opacity (0–1).
+    @Binding var colorHex: String
+    @Binding var opacity: Double
 
     @State private var editing = false
     @State private var draft = ""
@@ -19,10 +22,16 @@ struct StickyNoteView: View {
     /// its space, no matter how much text is pasted.
     private static let maxHeight: CGFloat = 160
 
-    // Muted Post-it palette tuned for the dark UI: dim khaki-gold paper
-    // with warm cream ink — clearly a sticky note, easy on the eye.
-    private static let paper = Color(red: 0.35, green: 0.31, blue: 0.13)
-    private static let ink = Color(red: 0.94, green: 0.89, blue: 0.66)
+    /// Paper as picked, with the user's transparency applied over the dark
+    /// backdrop; ink flips dark/cream based on the composited brightness so
+    /// the text stays readable at any colour/opacity.
+    private var paper: Color { Color(hex: colorHex).opacity(opacity) }
+    private var ink: Color {
+        let composited = Color(hex: colorHex).relativeLuminance * opacity
+        return composited > 0.45 ? Self.darkInk : Self.creamInk
+    }
+    private static let darkInk = Color(red: 0.24, green: 0.19, blue: 0.03)
+    private static let creamInk = Color(red: 0.94, green: 0.89, blue: 0.66)
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -40,7 +49,7 @@ struct StickyNoteView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Self.paper))
+        .background(RoundedRectangle(cornerRadius: 8).fill(paper))
         .padding(.horizontal, 16)
         .padding(.top, 10)
     }
@@ -53,13 +62,13 @@ struct StickyNoteView: View {
                 Text("Add a sticky note — e.g. “Daniel 7:18–28”")
                     .font(.callout)
                     .italic()
-                    .foregroundStyle(Self.ink.opacity(0.5))
+                    .foregroundStyle(ink.opacity(0.5))
             } else {
                 ScrollView {
                     Text(text)
                         .font(.callout)
                         .fontWeight(.medium)
-                        .foregroundStyle(Self.ink)
+                        .foregroundStyle(ink)
                         // No .textSelection here: selectable text swallows
                         // macOS click gestures, which killed tap-to-edit.
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -72,7 +81,7 @@ struct StickyNoteView: View {
                     // against the paper.
                     if textHeight > Self.maxHeight {
                         LinearGradient(
-                            colors: [Self.paper.opacity(0), Self.paper],
+                            colors: [paper.opacity(0), paper],
                             startPoint: .top,
                             endPoint: .bottom
                         )
@@ -96,11 +105,30 @@ struct StickyNoteView: View {
         VStack(alignment: .leading, spacing: 6) {
             TextEditor(text: $draft)
                 .font(.callout)
-                .foregroundStyle(Self.ink)
-                .tint(Self.ink)
+                .foregroundStyle(ink)
+                .tint(ink)
                 .focused($editorFocused)
                 .frame(minHeight: 48, maxHeight: 120)
                 .scrollContentBackground(.hidden)
+
+            HStack(spacing: 10) {
+                ColorPicker(
+                    "Paper",
+                    selection: Binding(
+                        get: { Color(hex: colorHex) },
+                        set: { colorHex = $0.hex }
+                    ),
+                    supportsOpacity: false
+                )
+                .font(.caption)
+
+                Slider(value: $opacity, in: 0.1...1)
+                    .tint(ink)
+                Text("\(Int((opacity * 100).rounded()))%")
+                    .font(.caption)
+                    .monospacedDigit()
+                    .frame(width: 38, alignment: .trailing)
+            }
 
             HStack {
                 Spacer()
@@ -147,9 +175,11 @@ private struct NoteHeightKey: PreferenceKey {
 }
 
 #Preview("With note") {
-    StickyNoteView(text: .constant("Daniel 7:18–28"))
+    StickyNoteView(text: .constant("Daniel 7:18–28"), colorHex: .constant("594F21"), opacity: .constant(1))
+        .padding()
 }
 
 #Preview("Empty") {
-    StickyNoteView(text: .constant(""))
+    StickyNoteView(text: .constant(""), colorHex: .constant("594F21"), opacity: .constant(1))
+        .padding()
 }

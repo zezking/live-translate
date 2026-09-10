@@ -48,9 +48,11 @@ Or open `LiveTranslate.xcodeproj` in Xcode and hit ⌘R.
    so text never duplicates.
 5. **Sticky note** → a muted note is pinned at the top of the interpreter screen,
    above the scrolling transcript — handy for this week's sermon text (e.g.
-   "Daniel 7:18–28"). Click the note anytime to type or paste a new one; it
-   persists across launches, never scrolls away, and long text scrolls inside
-   the note so the transcript keeps its space.
+   "Daniel 7:18–28"). Click the note anytime to type or paste a new one; the
+   same popover has a **paper colour picker** and a **transparency slider**.
+   Text ink flips dark/cream automatically so it stays readable on any colour.
+   It persists across launches, never scrolls away, and long text scrolls
+   inside the note so the transcript keeps its space.
 
 ## Notes / current scope
 
