@@ -37,13 +37,16 @@ struct StickyNoteView: View {
     /// translucency — same UX as the native macOS Stickies app, which has
     /// named colours and a Translucent toggle rather than a picker/slider.
     private struct PaperPreset { let name: String; let hex: String }
+    // Lifted bright enough that 100%-opaque paper reads as solid (dark muted
+    // colours perceptually blend into the near-black backdrop and look
+    // see-through even when they aren't).
     private static let paperPresets: [PaperPreset] = [
-        .init(name: "Yellow", hex: "594F21"),
-        .init(name: "Blue",   hex: "24455E"),
-        .init(name: "Green",  hex: "1F4A38"),
-        .init(name: "Pink",   hex: "5C2E42"),
-        .init(name: "Purple", hex: "452A5C"),
-        .init(name: "Gray",   hex: "3A3A3C"),
+        .init(name: "Yellow", hex: "7A6C2C"),
+        .init(name: "Blue",   hex: "2E5878"),
+        .init(name: "Green",  hex: "27604A"),
+        .init(name: "Pink",   hex: "753A55"),
+        .init(name: "Purple", hex: "573775"),
+        .init(name: "Gray",   hex: "4C4C50"),
     ]
     private static let translucentOpacity = 0.85
 
@@ -199,11 +202,11 @@ private struct NoteHeightKey: PreferenceKey {
 }
 
 #Preview("With note") {
-    StickyNoteView(text: .constant("Daniel 7:18–28"), colorHex: .constant("594F21"), opacity: .constant(1))
+    StickyNoteView(text: .constant("Daniel 7:18–28"), colorHex: .constant("7A6C2C"), opacity: .constant(1))
         .padding()
 }
 
 #Preview("Empty") {
-    StickyNoteView(text: .constant(""), colorHex: .constant("594F21"), opacity: .constant(1))
+    StickyNoteView(text: .constant(""), colorHex: .constant("7A6C2C"), opacity: .constant(1))
         .padding()
 }

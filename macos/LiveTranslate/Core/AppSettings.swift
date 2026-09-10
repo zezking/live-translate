@@ -60,7 +60,7 @@ final class AppSettings {
         inputMode = InputMode(rawValue: d.string(forKey: "inputMode") ?? "") ?? .mic
         inputDeviceUID = d.string(forKey: "inputDeviceUID")
         stickyNote = d.string(forKey: "stickyNote") ?? ""
-        stickyNoteHex = d.string(forKey: "stickyNoteHex") ?? "594F21"
+        stickyNoteHex = d.string(forKey: "stickyNoteHex") ?? "7A6C2C"
         stickyNoteOpacity = d.object(forKey: "stickyNoteOpacity") as? Double ?? 1.0
     }
 }

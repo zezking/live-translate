@@ -22,7 +22,7 @@ extension Color {
 
     /// sRGB hex "RRGGBB".
     var hex: String {
-        guard let c = NSColor(self).usingColorSpace(.sRGB) else { return "594F21" }
+        guard let c = NSColor(self).usingColorSpace(.sRGB) else { return "7A6C2C" }
         return String(
             format: "%02X%02X%02X",
             Int(round(c.redComponent * 255)),
