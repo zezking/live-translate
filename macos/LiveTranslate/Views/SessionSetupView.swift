@@ -42,17 +42,6 @@ struct SessionSetupView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                Section("Sticky note") {
-                    // labelsHidden() stops Form from splitting this row into a
-                    // leading label + trailing field (which put the cursor on
-                    // the right); the prompt renders as an in-field gray
-                    // placeholder that disappears while typing.
-                    TextField("Sticky note", text: bind(\.stickyNote), prompt: Text("e.g. Daniel 7:18–28"))
-                        .labelsHidden()
-                    Text("Pinned at the top of the interpreter screen — handy for this week's sermon text. You can also click the note there to edit or paste a new one.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
                 Section("Voice") {
                     Toggle("Translated voice-over", isOn: bind(\.voiceOver))
                     if settings.voiceOver {

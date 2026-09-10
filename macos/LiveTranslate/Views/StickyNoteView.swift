@@ -19,10 +19,10 @@ struct StickyNoteView: View {
     /// its space, no matter how much text is pasted.
     private static let maxHeight: CGFloat = 160
 
-    // Opaque Post-it palette: solid paper with dark ink, readable in both
-    // light and dark mode.
-    private static let paper = Color(red: 1.0, green: 0.96, blue: 0.72)
-    private static let ink = Color(red: 0.24, green: 0.19, blue: 0.03)
+    // Muted Post-it palette tuned for the dark UI: dim khaki-gold paper
+    // with warm cream ink — clearly a sticky note, easy on the eye.
+    private static let paper = Color(red: 0.35, green: 0.31, blue: 0.13)
+    private static let ink = Color(red: 0.94, green: 0.89, blue: 0.66)
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -63,6 +63,21 @@ struct StickyNoteView: View {
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(noteHeightReader)
+                }
+                .scrollIndicators(.visible)
+                .overlay(alignment: .bottom) {
+                    // Fade at the bottom edge signals more content below —
+                    // independent of how the system scrollbar contrasts
+                    // against the paper.
+                    if textHeight > Self.maxHeight {
+                        LinearGradient(
+                            colors: [Self.paper.opacity(0), Self.paper],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 14)
+                        .allowsHitTesting(false)
+                    }
                 }
                 .frame(height: min(textHeight, Self.maxHeight))
                 .onPreferenceChange(NoteHeightKey.self) { textHeight = $0 }
