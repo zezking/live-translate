@@ -54,6 +54,15 @@ Or open `LiveTranslate.xcodeproj` in Xcode and hit ⌘R.
 
 ## Notes / current scope
 
+- **Screen Recording permission (TCC):** every rebuild is ad-hoc signed (new
+  cdhash), which invalidates the grant and re-prompts even though System
+  Settings still shows it enabled. Fix: re-sign the installed app with the
+  stable identity — `macos/dev-signing.sh ~/Applications/LiveTranslate.app` —
+  then `tccutil reset ScreenCapture app.livetranslate` if the toggle looks
+  stuck, and grant once more (fully quit ⌘Q and reopen after granting).
+  The dev deploy flow is: xcodebuild → dev-signing.sh → ditto to
+  `~/Applications` → relaunch.
+
 - **Audio input:** the system default input device. Selecting in the picker sets
   the default; the engine picks it up. (Per-app device binding + system-audio
   loopback are deferred — see the plan.)

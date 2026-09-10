@@ -11,7 +11,7 @@
 # Usage: macos/dev-signing.sh [path/to/LiveTranslate.app]
 set -euo pipefail
 
-APP="${1:-/Applications/LiveTranslate.app}"
+APP="${1:-$HOME/Applications/LiveTranslate.app}"
 SELF_KC="$HOME/Library/Keychains/lt-sign.keychain-db"
 SELF_KC_PW="lt-dev-sign"
 SELF_CN="LiveTranslate Dev"
