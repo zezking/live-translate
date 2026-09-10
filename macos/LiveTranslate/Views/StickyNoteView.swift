@@ -35,17 +35,6 @@ struct StickyNoteView: View {
                 editor
             } else {
                 display
-
-                Button {
-                    beginEditing()
-                } label: {
-                    Image(systemName: "pencil")
-                        .font(.caption2)
-                        .foregroundStyle(Self.ink.opacity(0.7))
-                }
-                .buttonStyle(.plain)
-                .padding(.top, 4)
-                .help("Edit the sticky note")
             }
         }
         .padding(.horizontal, 12)
