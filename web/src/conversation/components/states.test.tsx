@@ -32,4 +32,19 @@ describe('StateOverlay (single-device)', () => {
     fireEvent.click(e.getByText(/another conversation/i));
     expect(onBeginAnother).toHaveBeenCalled();
   });
+
+  it('ended offers save-transcript only when a handler is provided', () => {
+    const onSaveTranscript = vi.fn();
+    const withSave = render(
+      wrap(<StateOverlay kind="ended" onResume={() => {}} onBeginAnother={() => {}} onSaveTranscript={onSaveTranscript} />),
+    );
+    fireEvent.click(withSave.getByText(/Save transcript/i));
+    expect(onSaveTranscript).toHaveBeenCalledTimes(1);
+    withSave.unmount();
+
+    const withoutSave = render(
+      wrap(<StateOverlay kind="ended" onResume={() => {}} onBeginAnother={() => {}} />),
+    );
+    expect(withoutSave.queryByText(/Save transcript/i)).toBeNull();
+  });
 });
