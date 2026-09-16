@@ -30,7 +30,7 @@ xcodebuild -project LiveTranslate.xcodeproj \
            -configuration Debug build | tail
 
 # 4. Launch the built app
-open build/Debug/LiveTranslate.app
+open build/Build/Products/Debug/LiveTranslate.app
 ```
 
 Or open `LiveTranslate.xcodeproj` in Xcode and hit ⌘R.
