@@ -21,3 +21,7 @@ cert/
 .claude/
 skills-lock.json
 .pi/
+.mimosa/
+
+# Local media samples (large binaries, not source)
+audio sample/
