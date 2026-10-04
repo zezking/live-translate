@@ -75,12 +75,13 @@ struct InterpreterView: View {
 
 /// Live captions as a two-column ledger: the source original (muted, left)
 /// beside the translation (prominent, right), one row per slice. A shared row
-/// plus a fixed vertical divider keeps the original↔translation pairing
-/// glanceable, and sticky column headers replace the per-slice labels.
+/// plus a vertical rule keeps the original↔translation pairing glanceable,
+/// and a single column header replaces the per-slice labels.
 ///
-/// The 40/60 column split comes from `layoutPriority` (2:3) on two flexible
-/// cells — pure layout, no GeometryReader, so short content always hugs the
-/// top instead of floating in the middle of the scroll viewport.
+/// Columns are laid out by `LedgerColumns` (a fixed 40/60 split, row height =
+/// tallest cell). The rule is an overlay on the source cell — never a
+/// `Divider()` inside an HStack, which turns vertical and greedily eats all
+/// available height (it blew the header up to half the window and broke rows).
 struct LiveTranscriptView: View {
     let interp: StreamTranslator
 
@@ -96,12 +97,11 @@ struct LiveTranscriptView: View {
 
     /// ENGLISH | 中文 — one header for the whole list, aligned over the columns.
     private var columnHeader: some View {
-        HStack(spacing: 0) {
-            sourceCell(CaptionLabel(text: interp.sourceName))
-            Divider()
-            translationCell(CaptionLabel(text: interp.targetName))
+        LedgerColumns {
+            sourceCell(CaptionLabel(text: interp.sourceName), verticalPadding: 8)
+            translationCell(CaptionLabel(text: interp.targetName), verticalPadding: 8)
         }
-        .padding(.vertical, 8)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private var transcriptBody: some View {
@@ -122,8 +122,8 @@ struct LiveTranscriptView: View {
                     }
                     Color.clear.frame(height: 1).id("bottom")
                 }
-                .padding(.vertical, 4)
             }
+            .frame(maxHeight: .infinity)
             .onChange(of: interp.entries) { _, _ in scrollToBottom(proxy) }
         }
     }
@@ -131,7 +131,7 @@ struct LiveTranscriptView: View {
     /// One slice: original left, translation right, top-aligned so the pairing
     /// reads across. History fades slightly; the live slice gets a soft highlight.
     private func sliceRow(_ entry: StreamTranslator.RiverEntry) -> some View {
-        HStack(alignment: .top, spacing: 0) {
+        LedgerColumns {
             // Left — source original (muted reference)
             sourceCell(
                 Group {
@@ -143,10 +143,9 @@ struct LiveTranscriptView: View {
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)
                     }
-                }
+                },
+                verticalPadding: 10
             )
-
-            Divider()
 
             // Right — translation (read into the broadcast mic; prominent)
             translationCell(
@@ -162,35 +161,42 @@ struct LiveTranscriptView: View {
                             .fontWeight(.medium)
                             .textSelection(.enabled)
                     }
-                }
+                },
+                verticalPadding: 10
             )
         }
-        .padding(.vertical, 10)
         .background(entry.live ? Color.primary.opacity(0.045) : Color.clear)
         .opacity(entry.live ? 1 : 0.75)
     }
 
-    // MARK: Column cells — shared by header and rows so the divider lines up.
+    // MARK: Column cells — shared by header and rows so the rule lines up.
 
-    /// Source (English) cell — 2 parts of the 2:3 split.
-    private func sourceCell<Content: View>(_ content: Content) -> some View {
+    /// Source (English) cell, with the column rule on its trailing edge.
+    /// `maxHeight: .infinity` lets it stretch to the row height LedgerColumns
+    /// proposes, so the rule spans the full row.
+    private func sourceCell<Content: View>(_ content: Content, verticalPadding: CGFloat) -> some View {
         content
-            .padding(.leading, edgePadding)
-            .padding(.trailing, edgePadding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .layoutPriority(2)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, edgePadding)
+            .padding(.vertical, verticalPadding)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .overlay(alignment: .trailing) {
+                Rectangle()
+                    .fill(Color.primary.opacity(0.12))
+                    .frame(width: 1)
+            }
     }
 
-    /// Translation (中文) cell — 3 parts of the 2:3 split.
-    private func translationCell<Content: View>(_ content: Content) -> some View {
+    /// Translation (中文) cell.
+    private func translationCell<Content: View>(_ content: Content, verticalPadding: CGFloat) -> some View {
         content
-            .padding(.leading, edgePadding)
-            .padding(.trailing, edgePadding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .layoutPriority(3)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, edgePadding)
+            .padding(.vertical, verticalPadding)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    /// Hairline between committed rows (softer than the column Divider).
+    /// Hairline between committed rows (softer than the column rule).
     private var rowSeparator: some View {
         Rectangle()
             .fill(Color.primary.opacity(0.06))
@@ -211,6 +217,41 @@ struct LiveTranscriptView: View {
         case .ended: return "Session ended."
         default: return ""
         }
+    }
+}
+
+/// Two-column row layout: the first subview gets `sourceFraction` of the
+/// width, the second the rest. Height is the taller cell's natural height
+/// (never greedy), and both cells are then placed at that height so
+/// backgrounds/rules span the full row.
+struct LedgerColumns: Layout {
+    var sourceFraction: CGFloat = 0.4
+
+    private func widths(_ total: CGFloat) -> (CGFloat, CGFloat) {
+        let left = (total * sourceFraction).rounded()
+        return (left, max(total - left, 0))
+    }
+
+    private func rowHeight(_ subviews: Subviews, _ w: (CGFloat, CGFloat)) -> CGFloat {
+        guard subviews.count == 2 else { return 0 }
+        let a = subviews[0].sizeThatFits(ProposedViewSize(width: w.0, height: nil)).height
+        let b = subviews[1].sizeThatFits(ProposedViewSize(width: w.1, height: nil)).height
+        return max(a, b)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let total = proposal.width ?? 600
+        return CGSize(width: total, height: rowHeight(subviews, widths(total)))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 2 else { return }
+        let w = widths(bounds.width)
+        let h = bounds.height
+        subviews[0].place(at: bounds.origin, anchor: .topLeading,
+                          proposal: ProposedViewSize(width: w.0, height: h))
+        subviews[1].place(at: CGPoint(x: bounds.minX + w.0, y: bounds.minY), anchor: .topLeading,
+                          proposal: ProposedViewSize(width: w.1, height: h))
     }
 }
 
