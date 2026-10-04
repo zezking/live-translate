@@ -29,3 +29,24 @@ enum LTLog {
         return f.string(from: Date())
     }
 }
+
+/// Logs main-thread stalls: a background timer pings the main queue every
+/// 100 ms and records how late the ping ran. Anything over 100 ms means the UI
+/// (and the main-thread audio hop) was blocked.
+final class MainThreadWatchdog: @unchecked Sendable {
+    private let timer = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "app.livetranslate.watchdog"))
+
+    func start() {
+        timer.schedule(deadline: .now() + 0.1, repeating: 0.1)
+        timer.setEventHandler {
+            let sent = DispatchTime.now()
+            DispatchQueue.main.async {
+                let ms = Double(DispatchTime.now().uptimeNanoseconds - sent.uptimeNanoseconds) / 1_000_000
+                if ms > 100 { LTLog.log("[watchdog] main thread stalled \(Int(ms)) ms") }
+            }
+        }
+        timer.resume()
+    }
+
+    func stop() { timer.cancel() }
+}

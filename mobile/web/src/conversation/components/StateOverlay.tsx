@@ -5,9 +5,11 @@ interface Props {
   kind: 'reconnecting' | 'paused' | 'ended';
   onResume: () => void;
   onBeginAnother: () => void;
+  /** Offered only when the session produced a transcript; omitted → no save button. */
+  onSaveTranscript?: () => void;
 }
 
-export function StateOverlay({ kind, onResume, onBeginAnother }: Props) {
+export function StateOverlay({ kind, onResume, onBeginAnother, onSaveTranscript }: Props) {
   const t = useT();
   return (
     <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/80 px-8 text-center backdrop-blur-sm">
@@ -23,6 +25,9 @@ export function StateOverlay({ kind, onResume, onBeginAnother }: Props) {
           <>
             <p className="text-lg text-foreground">{t('ended')}</p>
             <p className="text-sm text-muted-foreground">{t('warm_close')}</p>
+            {onSaveTranscript && (
+              <Button variant="outline" className="mt-2" onClick={onSaveTranscript}>{t('save_transcript')}</Button>
+            )}
             <Button variant="outline" className="mt-2" onClick={onBeginAnother}>{t('begin_another')}</Button>
           </>
         )}

@@ -7,13 +7,13 @@ dist/
 *.tsbuildinfo
 
 # v2 build artifacts
-/web/dist/
-/server/dist/
+mobile/web/dist/
+mobile/server/dist/
 
 .superpowers/
 
 # Local TLS dev certs (secrets)
-cert/
+mobile/cert/
 
 # Agent / skill tooling & generated artifacts
 .lavish/
@@ -21,3 +21,7 @@ cert/
 .claude/
 skills-lock.json
 .pi/
+.mimosa/
+
+# Local media samples (large binaries, not source)
+mobile/audio sample/

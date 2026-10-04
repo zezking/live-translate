@@ -73,16 +73,41 @@ struct InterpreterView: View {
     }
 }
 
-/// Live captions as a river: finished slices scroll up and stay readable; the
-/// live slice sits at the bottom. Translation prominent, original as a muted
-/// reference beneath it — per slice.
+/// Live captions as a two-column ledger: the source original (muted, left)
+/// beside the translation (prominent, right), one row per slice. A shared row
+/// plus a vertical rule keeps the original↔translation pairing glanceable,
+/// and a single column header replaces the per-slice labels.
+///
+/// Columns are laid out by `LedgerColumns` (a fixed 40/60 split, row height =
+/// tallest cell). The rule is an overlay on the source cell — never a
+/// `Divider()` inside an HStack, which turns vertical and greedily eats all
+/// available height (it blew the header up to half the window and broke rows).
 struct LiveTranscriptView: View {
     let interp: StreamTranslator
 
+    private let edgePadding: CGFloat = 20
+
     var body: some View {
+        VStack(spacing: 0) {
+            columnHeader
+            Divider()
+            transcriptBody
+        }
+    }
+
+    /// ENGLISH | 中文 — one header for the whole list, aligned over the columns.
+    private var columnHeader: some View {
+        LedgerColumns {
+            sourceCell(CaptionLabel(text: interp.sourceName), verticalPadding: 8)
+            translationCell(CaptionLabel(text: interp.targetName), verticalPadding: 8)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var transcriptBody: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 20) {
+                LazyVStack(alignment: .leading, spacing: 0) {
                     if interp.entries.isEmpty {
                         Text(hint)
                             .foregroundStyle(.secondary)
@@ -90,48 +115,93 @@ struct LiveTranscriptView: View {
                             .padding(.top, 40)
                     }
                     ForEach(interp.entries) { entry in
-                        sliceView(entry)
+                        sliceRow(entry)
                             .id(entry.id)
                             .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        rowSeparator
                     }
                     Color.clear.frame(height: 1).id("bottom")
                 }
-                .padding(20)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxHeight: .infinity)
             .onChange(of: interp.entries) { _, _ in scrollToBottom(proxy) }
         }
     }
 
-    private func sliceView(_ entry: StreamTranslator.RiverEntry) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Slot 1 — translation (what's read into the broadcast mic)
-            CaptionLabel(text: interp.targetName)
-            if entry.translation.isEmpty {
-                Text("Translating…")
-                    .font(.title3)
-                    .italic()
-                    .foregroundStyle(.tertiary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                Text(entry.translation)
-                    .font(.title3)
-                    .fontWeight(.medium)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+    /// One slice: original left, translation right, top-aligned so the pairing
+    /// reads across. History fades slightly; the live slice gets a soft highlight.
+    private func sliceRow(_ entry: StreamTranslator.RiverEntry) -> some View {
+        LedgerColumns {
+            // Left — source original (muted reference)
+            sourceCell(
+                Group {
+                    if entry.original.isEmpty {
+                        Text(" ")
+                    } else {
+                        Text(entry.original)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                },
+                verticalPadding: 10
+            )
 
-            // Slot 2 — original (muted reference)
-            if !entry.original.isEmpty {
-                CaptionLabel(text: interp.sourceName)
-                Text(entry.original)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            // Right — translation (read into the broadcast mic; prominent)
+            translationCell(
+                Group {
+                    if entry.translation.isEmpty {
+                        Text("Translating…")
+                            .font(.title3)
+                            .italic()
+                            .foregroundStyle(.tertiary)
+                    } else {
+                        Text(entry.translation)
+                            .font(.title3)
+                            .fontWeight(.medium)
+                            .textSelection(.enabled)
+                    }
+                },
+                verticalPadding: 10
+            )
         }
+        .background(entry.live ? Color.primary.opacity(0.045) : Color.clear)
         .opacity(entry.live ? 1 : 0.75)
+    }
+
+    // MARK: Column cells — shared by header and rows so the rule lines up.
+
+    /// Source (English) cell, with the column rule on its trailing edge.
+    /// `maxHeight: .infinity` lets it stretch to the row height LedgerColumns
+    /// proposes, so the rule spans the full row.
+    private func sourceCell<Content: View>(_ content: Content, verticalPadding: CGFloat) -> some View {
+        content
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, edgePadding)
+            .padding(.vertical, verticalPadding)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .overlay(alignment: .trailing) {
+                Rectangle()
+                    .fill(Color.primary.opacity(0.12))
+                    .frame(width: 1)
+            }
+    }
+
+    /// Translation (中文) cell.
+    private func translationCell<Content: View>(_ content: Content, verticalPadding: CGFloat) -> some View {
+        content
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, edgePadding)
+            .padding(.vertical, verticalPadding)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    /// Hairline between committed rows (softer than the column rule).
+    private var rowSeparator: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.06))
+            .frame(height: 1)
+            .padding(.leading, edgePadding)
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
@@ -150,6 +220,41 @@ struct LiveTranscriptView: View {
     }
 }
 
+/// Two-column row layout: the first subview gets `sourceFraction` of the
+/// width, the second the rest. Height is the taller cell's natural height
+/// (never greedy), and both cells are then placed at that height so
+/// backgrounds/rules span the full row.
+struct LedgerColumns: Layout {
+    var sourceFraction: CGFloat = 0.4
+
+    private func widths(_ total: CGFloat) -> (CGFloat, CGFloat) {
+        let left = (total * sourceFraction).rounded()
+        return (left, max(total - left, 0))
+    }
+
+    private func rowHeight(_ subviews: Subviews, _ w: (CGFloat, CGFloat)) -> CGFloat {
+        guard subviews.count == 2 else { return 0 }
+        let a = subviews[0].sizeThatFits(ProposedViewSize(width: w.0, height: nil)).height
+        let b = subviews[1].sizeThatFits(ProposedViewSize(width: w.1, height: nil)).height
+        return max(a, b)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let total = proposal.width ?? 600
+        return CGSize(width: total, height: rowHeight(subviews, widths(total)))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 2 else { return }
+        let w = widths(bounds.width)
+        let h = bounds.height
+        subviews[0].place(at: bounds.origin, anchor: .topLeading,
+                          proposal: ProposedViewSize(width: w.0, height: h))
+        subviews[1].place(at: CGPoint(x: bounds.minX + w.0, y: bounds.minY), anchor: .topLeading,
+                          proposal: ProposedViewSize(width: w.1, height: h))
+    }
+}
+
 struct StatusDot: View {
     let color: Color
     let label: String
@@ -161,7 +266,7 @@ struct StatusDot: View {
     }
 }
 
-/// Tiny uppercase language tag sitting above a transcript block.
+/// Tiny uppercase language tag naming a transcript column.
 struct CaptionLabel: View {
     let text: String
     var body: some View {

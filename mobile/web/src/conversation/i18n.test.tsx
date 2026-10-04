@@ -10,6 +10,7 @@ describe('i18n (single-device)', () => {
     const required = [
       'title', 'setup_subtitle', 'begin', 'connecting', 'hold_to_talk', 'listening',
       'paused', 'tap_resume', 'reconnecting', 'ended', 'warm_close', 'begin_another',
+      'save_transcript', 'transcript_title',
       'pause', 'resume', 'end', 'mic', 'mic_blocked', 'unauthorized',
       'admin_password', 'admin_continue', 'voice_over', 'voice_clone',
     ] as const;

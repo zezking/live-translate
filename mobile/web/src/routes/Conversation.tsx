@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AuthProvider, useAuth } from '@/auth/auth-context';
-import { I18nProvider } from '@/conversation/i18n';
+import { I18nProvider, useLocale } from '@/conversation/i18n';
+import { saveTranscriptToFile } from '@/conversation/transcript';
 import { useConversation } from '@/conversation/use-conversation';
 import { SetupView } from '@/conversation/components/SetupView';
 import { RiverTranscript } from '@/conversation/components/RiverTranscript';
@@ -15,7 +16,13 @@ function ConversationInner() {
   const { adminKey, setAdminKey, clear } = useAuth();
   const conv = useConversation({ adminKey, onUnauthorized: clear });
   const { state } = conv;
+  const locale = useLocale();
   const [sheetOpen, setSheetOpen] = useState(false);
+
+  const hasTranscript = state.turns.some((t) => t.original.trim());
+  const onSaveTranscript = hasTranscript
+    ? () => saveTranscriptToFile({ turns: state.turns, languages: state.languages ?? ['en', 'ko'], locale })
+    : undefined;
 
   const overlay =
     state.paused ? 'paused'
@@ -68,10 +75,10 @@ function ConversationInner() {
         {state.error && <ErrorLine message={state.error} onDismiss={conv.clearError} />}
 
         {overlay && state.phase !== 'ended' && (
-          <StateOverlay kind={overlay} onResume={conv.resume} onBeginAnother={() => window.location.reload()} />
+          <StateOverlay kind={overlay} onResume={conv.resume} onBeginAnother={() => window.location.reload()} onSaveTranscript={onSaveTranscript} />
         )}
         {state.phase === 'ended' && (
-          <StateOverlay kind="ended" onResume={conv.resume} onBeginAnother={() => window.location.reload()} />
+          <StateOverlay kind="ended" onResume={conv.resume} onBeginAnother={() => window.location.reload()} onSaveTranscript={onSaveTranscript} />
         )}
 
         <ControlsSheet
