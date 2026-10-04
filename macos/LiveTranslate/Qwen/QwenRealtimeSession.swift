@@ -28,11 +28,6 @@ final class QwenRealtimeSession: @unchecked Sendable {
     private var lastInputText = ""
     private var lastOutputText = ""
     private var sendAudioWhileInactiveLogged = false
-    // Latency diagnostics: count partial events per slice/response so the log
-    // shows when text actually arrives from the server.
-    private var inputDeltaCount = 0
-    private var outputDeltaCount = 0
-    private var sentAudioCount = 0
 
     // Callbacks (invoked from the URLSession delegate queue — hop to MainActor at the call site).
     var onReady: (() -> Void)?
@@ -112,8 +107,6 @@ final class QwenRealtimeSession: @unchecked Sendable {
             }
             return
         }
-        sentAudioCount += 1
-        if sentAudioCount % 50 == 0 { LTLog.log("[qwen] sent \(sentAudioCount) audio chunks") }
         let payload: [String: Any] = [
             "type": "input_audio_buffer.append",
             "audio": pcm.base64EncodedString(),
@@ -213,10 +206,6 @@ final class QwenRealtimeSession: @unchecked Sendable {
             // `stash` holds the live cumulative partial; `text` is empty until finalize.
             let combined = (object["text"] as? String ?? "") + (object["stash"] as? String ?? "")
             if combined != lastInputText {
-                inputDeltaCount += 1
-                if inputDeltaCount == 1 || inputDeltaCount % 10 == 0 {
-                    LTLog.log("[qwen] input delta #\(inputDeltaCount) (\(combined.count) chars)")
-                }
                 lastInputText = combined
                 onInputTranscription?(combined)
             }
@@ -227,22 +216,16 @@ final class QwenRealtimeSession: @unchecked Sendable {
             // (present when the source language is left unset for auto-detect).
             let final = object["transcript"] as? String ?? ""
             let lang = object["language"] as? String ?? ""
-            LTLog.log("[qwen] input slice finalized (lang=\(lang), \(final.count) chars, \(inputDeltaCount) deltas)")
-            inputDeltaCount = 0
+            LTLog.log("[qwen] input slice finalized (lang=\(lang), \(final.count) chars)")
             onInputFinalized?(final, lang)
 
         case "response.created":
             LTLog.log("[qwen] response created")
-            outputDeltaCount = 0
             onResponseCreated?()
 
         case "response.audio_transcript.text", "response.text.text":
             let out = object["text"] as? String ?? ""
             if out != lastOutputText {
-                outputDeltaCount += 1
-                if outputDeltaCount == 1 || outputDeltaCount % 10 == 0 {
-                    LTLog.log("[qwen] output delta #\(outputDeltaCount) (\(out.count) chars)")
-                }
                 lastOutputText = out
                 onOutputTranscription?(out)
             }

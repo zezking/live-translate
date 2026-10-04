@@ -47,7 +47,6 @@ final class StreamTranslator {
     private var ready = false
     private let capture: AudioSource
     private var playback: PlaybackEngine?
-    private var watchdog: MainThreadWatchdog?
 
     // River bookkeeping. Input and translation run on independent pipelines
     // (the translation of a slice routinely finishes AFTER the next slice has
@@ -95,9 +94,6 @@ final class StreamTranslator {
         liveIndex = nil
         responseIndex = nil
         nextEntryID = 0
-        watchdog?.stop()
-        watchdog = MainThreadWatchdog()
-        watchdog?.start()
         LTLog.log("[lt] begin — source=\(sourceLabel) \(sourceName) → \(targetName) voice=\(voiceOver) skipTarget=\(skipTargetLanguageSpeech)")
 
         // The source is a continuous stream: every captured chunk goes straight
@@ -142,8 +138,6 @@ final class StreamTranslator {
     }
 
     func end() async {
-        watchdog?.stop()
-        watchdog = nil
         capture.stop()
         playback?.stop()
         playback = nil
