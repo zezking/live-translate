@@ -25,6 +25,7 @@ final class StreamTranslator {
         var original: String
         var translation: String
         var live: Bool
+        let startedAt: Date
     }
 
     private let apiKey: String
@@ -39,6 +40,10 @@ final class StreamTranslator {
 
     /// Committed slices plus the live one at the end.
     private(set) var entries: [RiverEntry] = []
+    /// Slices trimmed off the front of `entries` to keep the view light. Kept
+    /// (text only, never rendered) so a saved transcript covers the whole session.
+    private var archived: [RiverEntry] = []
+    private var sessionStart = Date()
     var phase: Phase = .idle
     var lastError: String?
     var level: Float = 0
@@ -91,6 +96,8 @@ final class StreamTranslator {
         phase = .connecting
         lastError = nil
         entries = []
+        archived = []
+        sessionStart = Date()
         liveIndex = nil
         responseIndex = nil
         nextEntryID = 0
@@ -190,7 +197,7 @@ final class StreamTranslator {
         if let i = liveIndex, entries.indices.contains(i) {
             entries[i].original = text
         } else {
-            let entry = RiverEntry(id: nextEntryID, original: text, translation: "", live: true)
+            let entry = RiverEntry(id: nextEntryID, original: text, translation: "", live: true, startedAt: Date())
             nextEntryID += 1
             withAnimation(.easeOut(duration: 0.25)) {
                 entries.append(entry)
@@ -273,8 +280,43 @@ final class StreamTranslator {
     private func trimRiverIfNeeded() {
         guard entries.count > maxEntries else { return }
         let drop = entries.count - maxEntries / 2
+        archived.append(contentsOf: entries.prefix(drop))
         entries.removeFirst(drop)
         liveIndex = liveIndex.map { $0 - drop }.flatMap { $0 >= 0 ? $0 : nil }
         responseIndex = responseIndex.map { $0 - drop }.flatMap { $0 >= 0 ? $0 : nil }
+    }
+
+    // MARK: - Export
+
+    /// The whole session as plain text: a header, then one block per slice —
+    /// elapsed time, original, translation. Includes slices trimmed from the
+    /// view and the in-progress live slice.
+    func transcriptText() -> String {
+        let date = sessionStart.formatted(date: .long, time: .shortened)
+        var out = "Live Translate — \(sourceName) → \(targetName)\n"
+        out += "\(date) · source: \(sourceLabel)\n"
+        for entry in archived + entries {
+            let original = entry.original.trimmingCharacters(in: .whitespacesAndNewlines)
+            let translation = entry.translation.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !original.isEmpty || !translation.isEmpty else { continue }
+            out += "\n[\(Self.elapsed(from: sessionStart, to: entry.startedAt))]\n"
+            if !original.isEmpty { out += "\(original)\n" }
+            if !translation.isEmpty { out += "\(translation)\n" }
+        }
+        return out
+    }
+
+    /// Suggested file name, e.g. "Transcript 2026-10-04 09-30" (the save panel adds .txt).
+    var transcriptFilename: String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd HH-mm"
+        return "Transcript \(f.string(from: sessionStart))"
+    }
+
+    var hasTranscript: Bool { !archived.isEmpty || entries.contains { !$0.original.isEmpty } }
+
+    private static func elapsed(from start: Date, to time: Date) -> String {
+        let s = max(0, Int(time.timeIntervalSince(start)))
+        return String(format: "%02d:%02d:%02d", s / 3600, s / 60 % 60, s % 60)
     }
 }

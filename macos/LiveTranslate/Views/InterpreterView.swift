@@ -7,6 +7,12 @@ struct InterpreterView: View {
     let interp: StreamTranslator
     var onEnded: () -> Void = {}
     @Environment(AppSettings.self) private var settings
+    @State private var exportText: String?
+    @State private var saveError: String?
+    @State private var confirmingEnd = false
+    /// Set when the save was started from the End prompt: a successful save
+    /// then ends the session; cancelling or failing keeps it running.
+    @State private var endAfterSave = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -65,11 +71,64 @@ struct InterpreterView: View {
                     .multilineTextAlignment(.center)
             }
 
-            Button("End session", role: .destructive) {
-                Task { await interp.end() }
+            if let saveError {
+                Text(saveError)
+                    .font(.callout)
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+            }
+
+            HStack(spacing: 12) {
+                // Ending the session returns to setup and discards the
+                // transcript, so saving happens before End (here or via the
+                // End prompt).
+                Button("Save transcript…") { startSave(thenEnd: false) }
+                    .keyboardShortcut("s", modifiers: .command)
+                    .disabled(!interp.hasTranscript)
+
+                Button("End session", role: .destructive) {
+                    if interp.hasTranscript {
+                        confirmingEnd = true
+                    } else {
+                        endSession()
+                    }
+                }
             }
         }
         .padding(16)
+        .confirmationDialog("Save the transcript before ending?", isPresented: $confirmingEnd) {
+            Button("Save Transcript…") { startSave(thenEnd: true) }
+            Button("End Without Saving", role: .destructive) { endSession() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Ending the session discards the transcript.")
+        }
+        .fileExporter(
+            isPresented: Binding(get: { exportText != nil }, set: { if !$0 { exportText = nil } }),
+            item: exportText ?? "",
+            contentTypes: [.plainText],
+            defaultFilename: interp.transcriptFilename
+        ) { result in
+            switch result {
+            case .success:
+                if endAfterSave { endSession() }
+            case .failure(let error):
+                saveError = "Couldn’t save transcript: \(error.localizedDescription)"
+            }
+            endAfterSave = false
+        } onCancellation: {
+            endAfterSave = false
+        }
+    }
+
+    private func startSave(thenEnd: Bool) {
+        saveError = nil
+        endAfterSave = thenEnd
+        exportText = interp.transcriptText()
+    }
+
+    private func endSession() {
+        Task { await interp.end() }
     }
 }
 
