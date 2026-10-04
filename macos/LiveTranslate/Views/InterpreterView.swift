@@ -93,6 +93,9 @@ struct LiveTranscriptView: View {
                 Divider()
                 transcriptBody(sourceWidth: sourceWidth)
             }
+            // GeometryReader centers its child by default — pin to top so the
+            // header hugs the note above and the transcript fills below.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
     }
 
@@ -131,7 +134,9 @@ struct LiveTranscriptView: View {
                     Color.clear.frame(height: 1).id("bottom")
                 }
                 .padding(.vertical, 4)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                // Fill the viewport and top-align: short transcripts hug the
+                // header instead of floating centered mid-scroll.
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .onChange(of: interp.entries) { _, _ in scrollToBottom(proxy) }
         }
