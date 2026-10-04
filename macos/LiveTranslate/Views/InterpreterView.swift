@@ -73,16 +73,49 @@ struct InterpreterView: View {
     }
 }
 
-/// Live captions as a river: finished slices scroll up and stay readable; the
-/// live slice sits at the bottom. Translation prominent, original as a muted
-/// reference beneath it — per slice.
+/// Live captions as a two-column ledger: the source original (muted, left)
+/// beside the translation (prominent, right), one row per slice. A shared row
+/// plus a fixed vertical divider keeps the original↔translation pairing
+/// glanceable, and sticky column headers replace the per-slice labels.
 struct LiveTranscriptView: View {
     let interp: StreamTranslator
 
+    /// Fraction of the transcript width given to the source (left) column;
+    /// the translation (right, read aloud) takes the rest.
+    private static let sourceFraction: CGFloat = 0.4
+    private let edgePadding: CGFloat = 20
+
     var body: some View {
+        GeometryReader { geo in
+            let sourceWidth = geo.size.width * Self.sourceFraction
+            VStack(spacing: 0) {
+                columnHeader(sourceWidth: sourceWidth)
+                Divider()
+                transcriptBody(sourceWidth: sourceWidth)
+            }
+        }
+    }
+
+    /// ENGLISH | 中文 — one header for the whole list, aligned over the columns.
+    private func columnHeader(sourceWidth: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            CaptionLabel(text: interp.sourceName)
+                .padding(.leading, edgePadding)
+                .padding(.trailing, edgePadding)
+                .frame(width: sourceWidth, alignment: .leading)
+            Divider()
+            CaptionLabel(text: interp.targetName)
+                .padding(.leading, edgePadding)
+                .padding(.trailing, edgePadding)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 8)
+    }
+
+    private func transcriptBody(sourceWidth: CGFloat) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 20) {
+                LazyVStack(alignment: .leading, spacing: 0) {
                     if interp.entries.isEmpty {
                         Text(hint)
                             .foregroundStyle(.secondary)
@@ -90,48 +123,70 @@ struct LiveTranscriptView: View {
                             .padding(.top, 40)
                     }
                     ForEach(interp.entries) { entry in
-                        sliceView(entry)
+                        sliceRow(entry, sourceWidth: sourceWidth)
                             .id(entry.id)
                             .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        rowSeparator
                     }
                     Color.clear.frame(height: 1).id("bottom")
                 }
-                .padding(20)
+                .padding(.vertical, 4)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .onChange(of: interp.entries) { _, _ in scrollToBottom(proxy) }
         }
     }
 
-    private func sliceView(_ entry: StreamTranslator.RiverEntry) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Slot 1 — translation (what's read into the broadcast mic)
-            CaptionLabel(text: interp.targetName)
-            if entry.translation.isEmpty {
-                Text("Translating…")
-                    .font(.title3)
-                    .italic()
-                    .foregroundStyle(.tertiary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                Text(entry.translation)
-                    .font(.title3)
-                    .fontWeight(.medium)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+    /// One slice: original left, translation right, top-aligned so the pairing
+    /// reads across. History fades slightly; the live slice gets a soft highlight.
+    private func sliceRow(_ entry: StreamTranslator.RiverEntry, sourceWidth: CGFloat) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            // Left — source original (muted reference)
+            Group {
+                if entry.original.isEmpty {
+                    Text(" ")
+                } else {
+                    Text(entry.original)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
             }
+            .padding(.leading, edgePadding)
+            .padding(.trailing, edgePadding)
+            .frame(width: sourceWidth, alignment: .leading)
 
-            // Slot 2 — original (muted reference)
-            if !entry.original.isEmpty {
-                CaptionLabel(text: interp.sourceName)
-                Text(entry.original)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            Divider()
+
+            // Right — translation (read into the broadcast mic; prominent)
+            Group {
+                if entry.translation.isEmpty {
+                    Text("Translating…")
+                        .font(.title3)
+                        .italic()
+                        .foregroundStyle(.tertiary)
+                } else {
+                    Text(entry.translation)
+                        .font(.title3)
+                        .fontWeight(.medium)
+                        .textSelection(.enabled)
+                }
             }
+            .padding(.leading, edgePadding)
+            .padding(.trailing, edgePadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(.vertical, 10)
+        .background(entry.live ? Color.primary.opacity(0.045) : Color.clear)
         .opacity(entry.live ? 1 : 0.75)
+    }
+
+    /// Hairline between committed rows (softer than the column Divider).
+    private var rowSeparator: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.06))
+            .frame(height: 1)
+            .padding(.leading, edgePadding)
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
@@ -161,7 +216,7 @@ struct StatusDot: View {
     }
 }
 
-/// Tiny uppercase language tag sitting above a transcript block.
+/// Tiny uppercase language tag naming a transcript column.
 struct CaptionLabel: View {
     let text: String
     var body: some View {
