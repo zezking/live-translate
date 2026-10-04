@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct LiveTranslateApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var keychain = KeychainStore()
     @State private var settings = AppSettings()
 
