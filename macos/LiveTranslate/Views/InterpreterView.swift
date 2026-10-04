@@ -9,10 +9,35 @@ struct InterpreterView: View {
     @Environment(AppSettings.self) private var settings
     @State private var exportText: String?
     @State private var saveError: String?
-    @State private var confirmingEnd = false
-    /// Set when the save was started from the End prompt: a successful save
-    /// then ends the session; cancelling or failing keeps it running.
-    @State private var endAfterSave = false
+    /// The exit awaiting confirmation (End button, window close, or app quit).
+    @State private var exitRequest: SessionExit?
+    /// Set when a save was started from the exit prompt: a successful save
+    /// then completes that exit; cancelling or failing keeps the session running.
+    @State private var exitAfterSave: SessionExit?
+    @State private var hostWindow: NSWindow?
+    @State private var guardID = UUID()
+
+    /// Ways a running session can be left. Ending returns to setup and
+    /// discards the transcript; closing/quitting also stops the session.
+    enum SessionExit {
+        case end, closeWindow, quitApp
+
+        var title: String {
+            switch self {
+            case .end: "Save the transcript before ending?"
+            case .closeWindow: "A session is in progress. Close the window?"
+            case .quitApp: "A session is in progress. Quit Live Translate?"
+            }
+        }
+
+        var verb: String {
+            switch self {
+            case .end: "End"
+            case .closeWindow: "Close"
+            case .quitApp: "Quit"
+            }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,6 +55,19 @@ struct InterpreterView: View {
         .task { await interp.begin() }
         .onChange(of: interp.phase) { _, phase in
             if phase == .ended { onEnded() }
+        }
+        .background(
+            WindowCloseInterceptor(
+                shouldIntercept: { interp.phase != .ended },
+                onAttempt: { requestExit(.closeWindow) },
+                onWindow: { hostWindow = $0 }
+            )
+        )
+        .onAppear {
+            QuitGuard.shared.register(guardID) { requestExit(.quitApp) }
+        }
+        .onDisappear {
+            QuitGuard.shared.unregister(guardID)
         }
     }
 
@@ -82,26 +120,49 @@ struct InterpreterView: View {
                 // Ending the session returns to setup and discards the
                 // transcript, so saving happens before End (here or via the
                 // End prompt).
-                Button("Save transcript…") { startSave(thenEnd: false) }
+                Button("Save transcript…") { startSave(then: nil) }
                     .keyboardShortcut("s", modifiers: .command)
                     .disabled(!interp.hasTranscript)
 
                 Button("End session", role: .destructive) {
                     if interp.hasTranscript {
-                        confirmingEnd = true
+                        requestExit(.end)
                     } else {
-                        endSession()
+                        perform(.end)
                     }
                 }
             }
         }
         .padding(16)
-        .confirmationDialog("Save the transcript before ending?", isPresented: $confirmingEnd) {
-            Button("Save Transcript…") { startSave(thenEnd: true) }
-            Button("End Without Saving", role: .destructive) { endSession() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Ending the session discards the transcript.")
+        .confirmationDialog(
+            exitRequest?.title ?? "",
+            isPresented: Binding(
+                get: { exitRequest != nil },
+                set: { shown in
+                    // Dismissed without a choice (e.g. Esc): treat as Cancel.
+                    // Deferred so a button's own handling runs first.
+                    if !shown {
+                        DispatchQueue.main.async {
+                            if let pending = exitRequest {
+                                exitRequest = nil
+                                cancel(pending)
+                            }
+                        }
+                    }
+                }
+            ),
+            presenting: exitRequest
+        ) { exit in
+            if interp.hasTranscript {
+                Button("Save Transcript & \(exit.verb)…") { choose { startSave(then: exit) } }
+            }
+            Button(exit == .end ? "End Without Saving"
+                   : interp.hasTranscript ? "\(exit.verb) Without Saving" : exit.verb,
+                   role: .destructive) { choose { perform(exit) } }
+            Button("Cancel", role: .cancel) { choose { cancel(exit) } }
+        } message: { exit in
+            Text(exit == .end ? "Ending the session discards the transcript."
+                 : "This ends the live session\(interp.hasTranscript ? " and discards the transcript" : "").")
         }
         .fileExporter(
             isPresented: Binding(get: { exportText != nil }, set: { if !$0 { exportText = nil } }),
@@ -109,26 +170,61 @@ struct InterpreterView: View {
             contentTypes: [.plainText],
             defaultFilename: interp.transcriptFilename
         ) { result in
+            let pending = exitAfterSave
+            exitAfterSave = nil
             switch result {
             case .success:
-                if endAfterSave { endSession() }
+                if let pending { perform(pending) }
             case .failure(let error):
                 saveError = "Couldn’t save transcript: \(error.localizedDescription)"
+                if let pending { cancel(pending) }
             }
-            endAfterSave = false
         } onCancellation: {
-            endAfterSave = false
+            if let pending = exitAfterSave { cancel(pending) }
+            exitAfterSave = nil
         }
     }
 
-    private func startSave(thenEnd: Bool) {
+    // MARK: Exit flow
+
+    private func requestExit(_ exit: SessionExit) {
+        // Already asking or saving: a repeated close/quit just waits on that
+        // prompt — but a quit must still be answered, so decline this one.
+        guard exitRequest == nil, exitAfterSave == nil else {
+            if exit == .quitApp { NSApp.reply(toApplicationShouldTerminate: false) }
+            return
+        }
+        exitRequest = exit
+    }
+
+    /// Runs a prompt button's action after clearing the request, so the
+    /// dismissal handler doesn't also treat it as a cancel.
+    private func choose(_ action: () -> Void) {
+        exitRequest = nil
+        action()
+    }
+
+    private func startSave(then exit: SessionExit?) {
         saveError = nil
-        endAfterSave = thenEnd
+        exitAfterSave = exit
         exportText = interp.transcriptText()
     }
 
-    private func endSession() {
-        Task { await interp.end() }
+    /// Stop the session cleanly, then finish the exit.
+    private func perform(_ exit: SessionExit) {
+        let window = hostWindow
+        Task {
+            await interp.end()
+            switch exit {
+            case .end: break
+            case .closeWindow: window?.performClose(nil)
+            case .quitApp: NSApp.reply(toApplicationShouldTerminate: true)
+            }
+        }
+    }
+
+    private func cancel(_ exit: SessionExit) {
+        if exit == .quitApp { NSApp.reply(toApplicationShouldTerminate: false) }
     }
 }
 
